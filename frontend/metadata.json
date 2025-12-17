@@ -1,0 +1,5 @@
+{
+  "name": "CodeGrade AI",
+  "description": "An AI-powered coding assignment evaluation platform for teachers and students. Features automated grading, code quality analysis, and educational feedback.",
+  "requestFramePermissions": []
+}
