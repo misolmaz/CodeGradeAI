@@ -4,6 +4,7 @@ from .schemas import SubmissionRequest, GradingResult
 from .services import grade_submission
 from .database import engine, Base
 from . import models
+from .routers import admin, auth
 import os
 from dotenv import load_dotenv
 
@@ -17,6 +18,10 @@ app = FastAPI(
     description="AI-powered code grading API using Google Gemini",
     version="1.0.0"
 )
+
+app.include_router(admin.router)
+app.include_router(auth.router)
+
 
 # CORS Configuration
 # Allowing all origins for development flexibility. 

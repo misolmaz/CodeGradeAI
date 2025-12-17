@@ -1,10 +1,14 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./sql_app.db"
-# For PostgreSQL in production, you would use:
-# SQLALCHEMY_DATABASE_URL = "postgresql://user:password@postgresserver/db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Go up one level from 'app' to 'backend'
+BACKEND_DIR = os.path.dirname(BASE_DIR)
+DB_PATH = os.path.join(BACKEND_DIR, "sql_app.db")
+
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}

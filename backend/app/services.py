@@ -4,8 +4,61 @@ import google.generativeai as genai
 from typing import Dict, Any
 from .schemas import GradingResult, SubmissionRequest
 from dotenv import load_dotenv
+import pandas as pd
+from sqlalchemy.orm import Session
+from .models import User
+from .auth import get_password_hash
 
 load_dotenv()
+# ... (Gemini Init remains) ...
+
+def process_excel_upload(file_contents: bytes, db: Session):
+    try:
+        # Read Excel file from bytes
+        df = pd.read_excel(file_contents)
+        
+        # Expected columns: OgrenciNo, Ad, Soyad, Sinif
+        # Normalize column names just in case
+        df.columns = [c.strip() for c in df.columns]
+        
+        results = {"added": 0, "skipped": 0, "errors": []}
+        
+        for index, row in df.iterrows():
+            try:
+                student_no = str(row['OgrenciNo']).strip()
+                # Check if user exists
+                existing_user = db.query(User).filter(User.student_number == student_no).first()
+                if existing_user:
+                    results["skipped"] += 1
+                    continue
+                
+                full_name = f"{row.get('Ad', '')} {row.get('Soyad', '')}".strip()
+                class_code = str(row.get('Sinif', ''))
+                
+                # Default password is the student number
+                hashed_pwd = get_password_hash(student_no)
+                
+                new_user = User(
+                    student_number=student_no,
+                    full_name=full_name,
+                    password_hash=hashed_pwd,
+                    role="student",
+                    class_code=class_code,
+                    is_first_login=True
+                )
+                db.add(new_user)
+                results["added"] += 1
+                
+            except Exception as e:
+                results["errors"].append(f"Row {index}: {str(e)}")
+        
+        db.commit()
+        return results
+
+    except Exception as e:
+        raise Exception(f"Excel işleme hatası: {str(e)}")
+
+# ... (Existing Gemini functions) ...
 
 # Initialize Gemini
 API_KEY = os.getenv("GOOGLE_API_KEY")
