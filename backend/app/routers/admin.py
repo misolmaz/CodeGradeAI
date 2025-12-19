@@ -19,3 +19,10 @@ async def upload_students(file: UploadFile = File(...), db: Session = Depends(ge
         return {"message": "İşlem tamamlandı", "details": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/students")
+async def get_students(db: Session = Depends(get_db)):
+    from ..models import User
+    students = db.query(User).filter(User.role == "student").all()
+    return students
+

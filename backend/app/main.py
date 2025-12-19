@@ -4,7 +4,7 @@ from .schemas import SubmissionRequest, GradingResult
 from .services import grade_submission
 from .database import engine, Base
 from . import models
-from .routers import admin, auth
+from .routers import admin, auth, users, assignments, submissions, announcements
 import os
 from dotenv import load_dotenv
 
@@ -21,24 +21,25 @@ app = FastAPI(
 
 app.include_router(admin.router)
 app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(assignments.router)
+app.include_router(submissions.router)
+app.include_router(announcements.router)
+
+
 
 
 # CORS Configuration
-# Allowing all origins for development flexibility. 
-# For production, replace "*" with specific domains (e.g., your React app's URL).
-origins = [
-    "*", 
-    "http://localhost:5173",  # Vite default
-    "http://localhost:3000",  # CRA default
-]
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 async def root():

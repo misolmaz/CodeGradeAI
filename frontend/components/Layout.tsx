@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, BookOpen, BarChart2, Layout as LayoutIcon, Bell, Upload } from 'lucide-react';
+import { LogOut, BookOpen, BarChart2, Layout as LayoutIcon, Bell, Upload, User as UserIcon } from 'lucide-react';
+
 
 interface LayoutProps {
   user: User;
@@ -58,6 +59,14 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
                   <span className="text-sm font-medium">Öğrenci Analizi</span>
                 </button>
                 <button
+                  onClick={() => setCurrentView('announcement_management')}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'announcement_management' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+                    }`}
+                >
+                  <Bell size={20} />
+                  <span className="text-sm font-medium">Duyuru Yönetimi</span>
+                </button>
+                <button
                   onClick={() => setCurrentView('teacher_dashboard')}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'teacher_dashboard' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
                     }`}
@@ -65,9 +74,19 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
                   <Upload size={20} />
                   <span className="text-sm font-medium">Yönetim Paneli</span>
                 </button>
+
               </>
             )}
+            <button
+              onClick={() => setCurrentView('profile')}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'profile' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+                }`}
+            >
+              <UserIcon size={20} />
+              <span className="text-sm font-medium">Profil</span>
+            </button>
           </nav>
+
         </div>
 
         <div className="mt-auto p-6 border-t border-dark-700">

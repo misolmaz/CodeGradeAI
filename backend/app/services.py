@@ -136,24 +136,14 @@ def get_system_instruction(student_level: str) -> str:
     
     **PUANLAMA REHBERİ (0-100):**
     
-    BAŞLANGIÇ Seviyesi:
-    - Kod çalışmıyor: 0-30
-    - Çalışıyor ama ciddi hatalar var: 40-60  
-    - Temel gereksinimleri karşılıyor: 70-85
-    - Temiz, anlaşılır, doğru: 90-100
-    
-    ORTA Seviyesi:
-    - Kod çalışmıyor: 0-40
-    - Çalışıyor ama kötü yazılmış: 50-70
-    - Temiz, okunabilir, DRY: 75-90
-    - Optimize, iyi yapılandırılmış: 91-100
-    
-    İLERİ Seviyesi:
-    - Kod çalışmıyor: 0-50
-    - Temel düzeyde çalışıyor: 60-75
-    - İyi ama standartlara uymuyor: 76-85
-    - Profesyonel kalitede: 86-95
-    - Mükemmel (en iyi pratikler, testler, optimizasyon): 96-100
+    Aşağıdaki kriterlere göre Puan ver:
+    96-100: Mükemmel çözüm. Gereksinimleri tam karşılıyor, hata yok, temiz ve seviyeye uygun en iyi pratikleri kullanıyor. Eğer kod istenen seviye için kusursuzsa 100 vermekten çekinme.
+    85-95: Çok iyi. Küçük stil hataları veya çok ufak optimizasyon fırsatları var ama ana mantık kusursuz.
+    70-84: İyi/Geçer. Bazı best-practice ihlalleri var veya kod biraz karışık ama çalışıyor ve görevini yapıyor.
+    50-69: Zayıf. Kod çalışıyor ama mantıksal eksiklikler, kötü isimlendirmeler veya ciddi verimsizlikler var.
+    0-49: Başarısız. Kod çalışmıyor, ana gereksinimler karşılanmamış veya tamamen yanlış yaklaşım.
+
+    **NOT:** Sırf öneride bulunmak için puan kırma. Eğer kod mükemmelse 100 puan ver ve öneriler kısmına "Kodunuz zaten çok temiz, tebrikler!" gibi notlar düş.
     
     **ÇIKTI FORMATI:**
     - TÜM çıktılar Türkçe olmalı
@@ -184,16 +174,6 @@ async def grade_submission(request: SubmissionRequest) -> GradingResult:
     **Öğrenci Seviyesi:** {request.studentLevel}
     
     Lütfen kodu analiz et, zihinsel olarak çalıştır ve değerlendir.
-    Yanıtın kesinlikle bir JSON nesnesi olmalı ve şu şemaya uymalıdır:
-    {{
-        "grade": integer,
-        "feedback": string,
-        "codeQuality": string,
-        "suggestions": [string],
-        "unitTests": [
-            {{ "testName": string, "passed": boolean, "message": string }}
-        ]
-    }}
     """
 
     generation_config = {
@@ -202,6 +182,7 @@ async def grade_submission(request: SubmissionRequest) -> GradingResult:
         "top_k": 32,
         "max_output_tokens": 8192,
         "response_mime_type": "application/json",
+        "response_schema": GradingResult,
     }
     
     # Combined prompt with system instruction
@@ -211,71 +192,23 @@ async def grade_submission(request: SubmissionRequest) -> GradingResult:
     model = genai.GenerativeModel(
         model_name=MODEL_NAME,
         generation_config=generation_config
-        # system_instruction removed to Ensure compatibility
     )
 
     try:
         response = model.generate_content(final_prompt)
-        # Clean response text (remove markdown backticks if present)
         text = response.text.strip()
-        print(f"DEBUG: Raw AI Response: {text}")  # Debug log added
-
-        if text.startswith("```"):
-            # Remove first line (```json) and last line (```)
-            # Find the first newline and last newline to robustly strip
-            first_newline = text.find("\n")
-            last_newline = text.rfind("\n")
-            if first_newline != -1 and last_newline != -1:
-                 text = text[first_newline+1:last_newline].strip()
+        print(f"DEBUG: AI Response: {text}")
         
         # Parse JSON response
-        try:
-            result_json = json.loads(text)
-        except json.JSONDecodeError:
-            # Better Repair Logic for Truncated JSON
-            trimmed = text.strip()
-            
-            # 1. If it ends inside a string (no closing quote), backtrace to the start of that string or comma
-            # Check if the number of quotes is odd (meaning inside a string)
-            if trimmed.count('"') % 2 != 0:
-                # Find the last quote
-                last_quote_index = trimmed.rfind('"')
-                if last_quote_index != -1:
-                    # Remove the incomplete string content
-                    # We also need to check if there was a comma before this string
-                     trimmed = trimmed[:last_quote_index]
-                     # Remove trailing comma if exists after removing string
-                     trimmed = trimmed.rstrip().rstrip(',').rstrip()
-
-            # 2. Close open structures
-            open_braces = trimmed.count('{') - trimmed.count('}')
-            open_brackets = trimmed.count('[') - trimmed.count(']')
-            
-            # Append necessary closing characters
-            repaired_text = trimmed + ("]" * open_brackets) + ("}" * open_braces)
-            
-            print(f"DEBUG: Attempting repair -> {repaired_text}")
-
-            try:
-                result_json = json.loads(repaired_text)
-                # If repair resulted in missing required fields (like unitTests if truncated before that), fill defaults
-                if "unitTests" not in result_json:
-                    result_json["unitTests"] = []
-                if "suggestions" not in result_json:
-                     result_json["suggestions"] = []
-                
-            except:
-                 print(f"DEBUG: Repair failed.")
-                 raise ValueError("AI yanıtı yarım kaldı (Token limiti veya ağ hatası).")
-
+        result_json = json.loads(text)
         return GradingResult(**result_json)
         
     except Exception as e:
         print(f"Error calling Gemini: {e}")
         return GradingResult(
             grade=0,
-            feedback="Yapay zeka yanıtı işlenirken bir hata oluştu (JSON Hatası). Lütfen tekrar deneyin.",
-            codeQuality="Bilinmiyor",
-            suggestions=["Tekrar gönderin", "Kodunuzu kısaltmayı deneyin"],
+            feedback=f"Yapay zeka yanıtı işlenirken bir hata oluştu: {str(e)}",
+            codeQuality="Hata",
+            suggestions=["Lütfen tekrar gönderin"],
             unitTests=[]
         )

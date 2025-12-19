@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '../types';
 import { FileCode, Loader2, Lock, User as UserIcon } from 'lucide-react';
+import { API_BASE_URL } from '../config';
+
 
 export const Login = () => {
     const { login } = useAuth();
@@ -20,7 +22,8 @@ export const Login = () => {
             formData.append('username', username);
             formData.append('password', password);
 
-            const response = await fetch('http://localhost:8000/token', {
+            const response = await fetch(`${API_BASE_URL}/token`, {
+
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -33,7 +36,9 @@ export const Login = () => {
             }
 
             const data = await response.json();
-            login(data.access_token, data.role, data.username);
+            login(data.access_token, data.role, data.username, data.student_number, data.class_code, data.avatar_url, data.user_id.toString());
+
+
 
         } catch (err: any) {
             setError(err.message);

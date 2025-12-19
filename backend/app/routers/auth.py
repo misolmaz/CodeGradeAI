@@ -29,4 +29,15 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(
         data={"sub": user.student_number, "role": user.role}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer", "role": user.role, "username": user.full_name}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer", 
+        "role": user.role, 
+        "username": user.full_name,
+        "student_number": user.student_number,
+        "class_code": user.class_code,
+        "avatar_url": user.avatar_url,
+        "user_id": user.id
+    }
+
+

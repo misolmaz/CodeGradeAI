@@ -18,6 +18,9 @@ export interface Assignment {
   language: string;
   studentLevel: 'beginner' | 'intermediate' | 'advanced';
   status: 'active' | 'expired';
+  targetType: 'all' | 'class' | 'specific';
+  targetClass?: string;
+  targetStudents?: string[]; // Student numbers
 }
 
 export interface UnitTestResult {

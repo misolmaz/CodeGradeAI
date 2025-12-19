@@ -15,6 +15,12 @@ class Token(BaseModel):
     token_type: str
     role: str
     username: str
+    student_number: str
+    class_code: str | None = None
+    avatar_url: str | None = None
+    user_id: int
+
+
 
 class TokenData(BaseModel):
     username: Optional[str] = None

@@ -29,7 +29,10 @@ export const INITIAL_ASSIGNMENTS: Assignment[] = [
     dueDate: new Date(Date.now() + 86400000 * 2).toISOString(),
     language: 'python',
     studentLevel: 'beginner',
-    status: 'active'
+    status: 'active',
+    targetType: 'all',
+    targetClass: '',
+    targetStudents: []
   },
   {
     id: 'a2',
@@ -38,7 +41,10 @@ export const INITIAL_ASSIGNMENTS: Assignment[] = [
     dueDate: new Date(Date.now() - 86400000).toISOString(),
     language: 'javascript/react',
     studentLevel: 'intermediate',
-    status: 'expired'
+    status: 'expired',
+    targetType: 'all',
+    targetClass: '',
+    targetStudents: []
   }
 ];
 
