@@ -22,6 +22,7 @@ class Assignment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
     description = Column(Text)
     due_date = Column(String) # For simplicity, storing as string or use DateTime
     language = Column(String)

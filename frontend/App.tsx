@@ -6,6 +6,8 @@ import { db } from './services/persistence';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Login } from './components/Login';
 import { TeacherDashboard } from './components/TeacherDashboard';
+import { Leaderboard } from './components/Leaderboard';
+
 import {
   Plus, Calendar, Clock, CheckCircle2, AlertCircle, FileCode,
   ChevronRight, Award, Activity, Search, X, GraduationCap, Trash2,
@@ -1507,7 +1509,9 @@ const AppContent = () => {
       {currentView === 'students' && user.role === UserRole.TEACHER && renderStudentsView()}
       {currentView === 'student_analysis_detail' && user.role === UserRole.TEACHER && renderStudentAnalysisDetailView()}
       {currentView === 'profile' && renderProfileView()}
+      {currentView === 'leaderboard' && <Leaderboard />}
       {selectedSubmission && renderSubmissionDetailModal()}
+
     </Layout>
   );
 };

@@ -4,7 +4,7 @@ from .schemas import SubmissionRequest, GradingResult
 from .services import grade_submission
 from .database import engine, Base
 from . import models
-from .routers import admin, auth, users, assignments, submissions, announcements
+from .routers import admin, auth, users, assignments, submissions, announcements, leaderboard
 import os
 from dotenv import load_dotenv
 
@@ -29,6 +29,8 @@ app.include_router(users.router)
 app.include_router(assignments.router)
 app.include_router(submissions.router)
 app.include_router(announcements.router)
+app.include_router(leaderboard.router)
+
 
 
 

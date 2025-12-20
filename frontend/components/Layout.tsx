@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
-import { LogOut, BookOpen, BarChart2, Layout as LayoutIcon, Bell, Upload, User as UserIcon, Menu, X } from 'lucide-react';
+import { LogOut, BookOpen, BarChart2, Layout as LayoutIcon, Bell, Upload, User as UserIcon, Menu, X, Trophy } from 'lucide-react';
 
 
 interface LayoutProps {
@@ -47,6 +47,14 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
             <span className="text-sm font-medium">
               {user.role === UserRole.TEACHER ? 'Ödev Yönetimi' : 'Ödevlerim'}
             </span>
+          </button>
+          <button
+            onClick={() => { setCurrentView('leaderboard'); setIsMobileMenuOpen(false); }}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'leaderboard' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+              }`}
+          >
+            <Trophy size={20} />
+            <span className="text-sm font-medium">Liderlik Tablosu</span>
           </button>
           {user.role === UserRole.TEACHER && (
             <>
