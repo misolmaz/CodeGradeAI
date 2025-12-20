@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Upload, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+
 import { API_BASE_URL } from '../config';
 
 
@@ -72,7 +73,28 @@ export const TeacherDashboard = () => {
         }
     };
 
+    const handleResetPassword = async (studentNumber: string) => {
+        if (!window.confirm(`${studentNumber} numaralı öğrencinin şifresi sıfırlanacak. Şifre, öğrenci numarası ile aynı yapılacak. Emin misiniz?`)) return;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/admin/reset-password/${studentNumber}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                alert("Şifre başarıyla sıfırlandı.");
+            } else {
+                alert("Şifre sıfırlanırken bir hata oluştu.");
+            }
+        } catch (error) {
+            console.error("Şifre sıfırlama hatası:", error);
+            alert("İşlem başarısız.");
+        }
+    };
+
     return (
+
         <div className="space-y-6">
             <div className="bg-dark-800 p-8 rounded-xl border border-dark-700">
                 <h2 className="text-2xl font-bold text-white mb-2">Öğretmen Paneli</h2>
@@ -147,14 +169,24 @@ export const TeacherDashboard = () => {
                             ) : students.length > 0 ? (
                                 students.map((s) => (
                                     <div key={s.id} className="p-4 hover:bg-dark-800 transition-colors flex justify-between items-center group">
-                                        <div>
-                                            <div className="text-sm font-semibold text-white group-hover:text-primary transition-colors">{s.full_name}</div>
-                                            <div className="text-xs text-slate-500 font-mono">No: {s.student_number} | Sınıf: {s.class_code}</div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-dark-700 flex items-center justify-center text-[10px] sm:text-xs text-slate-400 uppercase flex-shrink-0">
+                                                {s.full_name.split(' ').map((n: string) => n[0]).join('')}
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-semibold text-white group-hover:text-primary transition-colors">{s.full_name}</div>
+                                                <div className="text-[10px] sm:text-xs text-slate-500 font-mono">No: {s.student_number} | Sınıf: {s.class_code}</div>
+                                            </div>
                                         </div>
-                                        <div className="w-8 h-8 rounded-full bg-dark-700 flex items-center justify-center text-[10px] text-slate-400 uppercase">
-                                            {s.full_name.split(' ').map((n: string) => n[0]).join('')}
-                                        </div>
+                                        <button
+                                            onClick={() => handleResetPassword(s.student_number)}
+                                            title="Şifreyi Sıfırla"
+                                            className="p-2 text-slate-500 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-all"
+                                        >
+                                            <RefreshCw size={16} />
+                                        </button>
                                     </div>
+
                                 ))
                             ) : (
                                 <div className="p-8 text-center text-slate-500 text-sm italic">

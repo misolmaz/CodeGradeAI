@@ -396,18 +396,18 @@ const AppContent = () => {
               {studentSubs.slice(0, 5).map(sub => {
                 const assignment = assignments.find(a => a.id === sub.assignmentId);
                 return (
-                  <div key={sub.id} className="p-5 hover:bg-dark-700/20 transition-all flex justify-between items-center group">
+                  <div key={sub.id} className="p-5 hover:bg-dark-700/20 transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 group">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                      <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center text-primary group-hover:scale-110 transition-transform flex-shrink-0">
                         <FileCode size={20} />
                       </div>
                       <div>
-                        <h4 className="text-white font-medium">{assignment?.title || 'Ödev'}</h4>
+                        <h4 className="text-white font-medium line-clamp-1">{assignment?.title || 'Ödev'}</h4>
                         <p className="text-slate-500 text-xs">{new Date(sub.submittedAt).toLocaleDateString()} tarihinde gönderildi</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className={`px-3 py-1 rounded-lg text-xs font-black border ${(sub.gradingResult?.grade || 0) >= 70 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                    <div className="flex items-center justify-between w-full sm:w-auto gap-4">
+                      <span className={`px-3 py-1 rounded-lg text-xs font-black border flex-shrink-0 ${(sub.gradingResult?.grade || 0) >= 70 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                         (sub.gradingResult?.grade || 0) >= 50 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                         }`}>
                         {sub.gradingResult?.grade || 0} Puan
@@ -419,6 +419,7 @@ const AppContent = () => {
                       </button>
                     </div>
                   </div>
+
                 );
               })}
             </div>
@@ -498,22 +499,22 @@ const AppContent = () => {
 
             return (
               <div key={assignment.id} className="bg-dark-800 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all group relative overflow-hidden">
-                <div className="flex justify-between items-start relative z-10">
-                  <div className="flex gap-5">
-                    <div className="w-14 h-14 rounded-xl bg-dark-700 flex items-center justify-center text-primary border border-dark-600 shadow-inner group-hover:scale-110 transition-transform">
-                      <FileCode size={28} />
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative z-10">
+                  <div className="flex gap-4 sm:gap-5 w-full">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-dark-700 flex items-center justify-center text-primary border border-dark-600 shadow-inner group-hover:scale-110 transition-transform flex-shrink-0">
+                      <FileCode size={24} className="sm:size-28" />
                     </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-white group-hover:text-primary transition-colors">{assignment.title}</h3>
-                      <p className="text-slate-400 text-sm mb-3 mt-1 line-clamp-2 max-w-xl">{assignment.description}</p>
-                      <div className="flex items-center gap-4 text-xs text-slate-500 font-medium">
-                        <span className="flex items-center gap-1.5"><Calendar size={14} className="text-slate-400" /> {new Date(assignment.dueDate).toLocaleDateString()}</span>
-                        <span className="px-3 py-1 rounded-full bg-dark-900 text-primary uppercase border border-primary/20 tracking-wider font-bold">{assignment.language}</span>
-                        <span className="px-3 py-1 rounded-full bg-dark-900 text-slate-300 border border-dark-600">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg sm:text-xl font-bold text-white group-hover:text-primary transition-colors truncate">{assignment.title}</h3>
+                      <p className="text-slate-400 text-xs sm:text-sm mb-3 mt-1 line-clamp-2 max-w-xl">{assignment.description}</p>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-slate-500 font-medium">
+                        <span className="flex items-center gap-1.5 whitespace-nowrap"><Calendar size={14} className="text-slate-400" /> {new Date(assignment.dueDate).toLocaleDateString()}</span>
+                        <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-dark-900 text-primary uppercase border border-primary/20 tracking-wider font-bold">{assignment.language}</span>
+                        <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-dark-900 text-slate-300 border border-dark-600">
                           {assignment.studentLevel === 'beginner' ? '👶 Başlangıç' : assignment.studentLevel === 'intermediate' ? '🎓 Orta' : '🚀 İleri'}
                         </span>
                         {isTeacher && assignment.targetType !== 'all' && (
-                          <span className="px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-bold uppercase tracking-tighter">
+                          <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-bold uppercase tracking-tighter">
                             🎯 {assignment.targetType === 'class' ? `Sınıf: ${assignment.targetClass}` : 'Seçili Öğrenciler'}
                           </span>
                         )}
@@ -521,78 +522,80 @@ const AppContent = () => {
                     </div>
                   </div>
 
-                  {isTeacher ? (
-                    <div className="text-right flex flex-col items-end">
-                      <div className="flex flex-col items-end">
-                        <span className="text-3xl font-black text-white">{subCount}</span>
-                        <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Teslim</span>
-                      </div>
-                      <div className="mt-4 flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setEditingAssignment(assignment);
-                            setNewAssignmentData({
-                              title: assignment.title,
-                              description: assignment.description,
-                              language: assignment.language,
-                              dueDate: assignment.dueDate,
-                              studentLevel: assignment.studentLevel,
-                              targetType: assignment.targetType,
-                              targetClass: assignment.targetClass,
-                              targetStudents: assignment.targetStudents
-                            });
-                            setIsModalOpen(true);
-                          }}
-                          className="p-2 bg-dark-700 hover:bg-primary/20 hover:text-primary rounded-lg transition-all border border-dark-600"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (window.confirm('Bu ödevi silmek istediğinize emin misiniz?')) {
-                              const res = await fetch(`http://localhost:8000/assignments/${assignment.id}`, {
-                                method: 'DELETE',
-                                headers: { 'Authorization': `Bearer ${token}` }
-                              });
-                              if (res.ok) fetchAllData();
-                            }
-                          }}
-                          className="p-2 bg-dark-700 hover:bg-rose-500/20 hover:text-rose-400 rounded-lg transition-all border border-dark-600"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => { setSelectedAssignment(assignment); setCurrentView('assignment_detail'); }}
-                          className="p-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all shadow-lg shadow-primary/20">
-                          <ChevronRight size={18} />
-                        </button>
-                      </div>
-                    </div>
-
-                  ) : (
-                    <div>
-                      {studentSubmission ? (
-                        <div className="flex flex-col items-end gap-3">
-                          <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg text-xs font-black border border-emerald-500/20 shadow-sm flex items-center gap-2">
-                            <CheckCircle2 size={14} /> TAMAMLANDI
-                          </span>
+                  <div className="flex items-center justify-between lg:justify-end w-full lg:w-auto gap-4 lg:gap-8 border-t lg:border-t-0 border-dark-700 pt-4 lg:pt-0">
+                    {isTeacher ? (
+                      <>
+                        <div className="flex flex-col items-center lg:items-end">
+                          <span className="text-2xl sm:text-3xl font-black text-white">{subCount}</span>
+                          <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Teslim</span>
+                        </div>
+                        <div className="flex items-center gap-2">
                           <button
-                            onClick={() => setSelectedSubmission(studentSubmission)}
-                            className="bg-dark-700 hover:bg-dark-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all border border-dark-600">
-                            Sonucu İncele
+                            onClick={() => {
+                              setEditingAssignment(assignment);
+                              setNewAssignmentData({
+                                title: assignment.title,
+                                description: assignment.description,
+                                language: assignment.language,
+                                dueDate: assignment.dueDate,
+                                studentLevel: assignment.studentLevel,
+                                targetType: assignment.targetType,
+                                targetClass: assignment.targetClass,
+                                targetStudents: assignment.targetStudents
+                              });
+                              setIsModalOpen(true);
+                            }}
+                            className="p-2 sm:p-2.5 bg-dark-700 hover:bg-primary/20 hover:text-primary rounded-lg transition-all border border-dark-600"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (window.confirm('Bu ödevi silmek istediğinize emin misiniz?')) {
+                                const res = await fetch(`${API_BASE_URL}/assignments/${assignment.id}`, {
+                                  method: 'DELETE',
+                                  headers: { 'Authorization': `Bearer ${token}` }
+                                });
+                                if (res.ok) fetchAllData();
+                              }
+                            }}
+                            className="p-2 sm:p-2.5 bg-dark-700 hover:bg-rose-500/20 hover:text-rose-400 rounded-lg transition-all border border-dark-600"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => { setSelectedAssignment(assignment); setCurrentView('assignment_detail'); }}
+                            className="p-2 sm:p-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all shadow-lg shadow-primary/20">
+                            <ChevronRight size={18} />
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          onClick={() => { setSelectedAssignment(assignment); setIsModalOpen(true); }}
-                          className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20 active:scale-95">
-                          Ödev Yükle
-                        </button>
-                      )}
-                    </div>
-                  )}
+                      </>
+                    ) : (
+                      <>
+                        {studentSubmission ? (
+                          <>
+                            <span className="px-3 sm:px-4 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg text-[10px] sm:text-xs font-black border border-emerald-500/20 shadow-sm flex items-center gap-2">
+                              <CheckCircle2 size={14} /> TAMAMLANDI
+                            </span>
+                            <button
+                              onClick={() => setSelectedSubmission(studentSubmission)}
+                              className="bg-dark-700 hover:bg-dark-600 text-white px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all border border-dark-600 whitespace-nowrap">
+                              Sonucu İncele
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => { setSelectedAssignment(assignment); setIsModalOpen(true); }}
+                            className="w-full sm:w-auto px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20 active:scale-95 whitespace-nowrap">
+                            Ödev Yükle
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
+
             );
           })}
           {filteredAssignments.length === 0 && (
@@ -756,23 +759,24 @@ const AppContent = () => {
         {isModalOpen && !isTeacher && selectedAssignment && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <div className="bg-dark-800 w-full max-w-4xl rounded-2xl border border-dark-700 shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-8 duration-300">
-              <div className="p-6 border-b border-dark-700 flex justify-between items-center bg-dark-700/30">
-                <div className="flex items-center gap-4">
-                  <div className="p-2.5 bg-primary/10 rounded-lg text-primary border border-primary/20"><FileCode size={24} /></div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">{selectedAssignment.title}</h3>
-                    <p className="text-xs text-slate-400 uppercase font-black tracking-widest">{selectedAssignment.language} Ödevi</p>
+              <div className="p-4 sm:p-6 border-b border-dark-700 flex justify-between items-center bg-dark-700/30">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                  <div className="p-2 sm:p-2.5 bg-primary/10 rounded-lg text-primary border border-primary/20 flex-shrink-0"><FileCode size={20} className="sm:size-24" /></div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg sm:text-xl font-bold text-white truncate">{selectedAssignment.title}</h3>
+                    <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">{selectedAssignment.language} Ödevi</p>
                   </div>
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-dark-700 rounded-full transition-colors text-slate-400 hover:text-white">
-                  <X />
+                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-dark-700 rounded-full transition-colors text-slate-400 hover:text-white flex-shrink-0">
+                  <X size={20} />
                 </button>
               </div>
-              <div className="p-8 flex-1 overflow-y-auto space-y-6">
-                <div className="bg-dark-900/80 p-6 rounded-2xl border border-dark-700 text-slate-300">
-                  <h4 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-3">Soru/Tanım</h4>
-                  <p className="text-lg leading-relaxed italic">"{selectedAssignment.description}"</p>
+              <div className="p-4 sm:p-8 flex-1 overflow-y-auto space-y-6">
+                <div className="bg-dark-900/80 p-4 sm:p-6 rounded-2xl border border-dark-700 text-slate-300">
+                  <h4 className="text-[10px] sm:text-sm font-black text-slate-500 uppercase tracking-widest mb-3">Soru/Tanım</h4>
+                  <p className="text-sm sm:text-lg leading-relaxed italic">"{selectedAssignment.description}"</p>
                 </div>
+
 
                 <div className="flex flex-col gap-3">
                   <div className="flex justify-between items-center px-1">
@@ -798,16 +802,17 @@ const AppContent = () => {
 
                 </div>
               </div>
-              <div className="p-6 border-t border-dark-700 flex justify-end gap-4 bg-dark-900/30 backdrop-blur">
-                <button onClick={() => setIsModalOpen(false)} className="px-6 py-2.5 text-slate-400 hover:text-white font-bold transition-colors">İptal</button>
+              <div className="p-4 sm:p-6 border-t border-dark-700 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 bg-dark-900/30 backdrop-blur">
+                <button onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto px-6 py-2.5 text-slate-400 hover:text-white font-bold transition-colors order-2 sm:order-1">İptal</button>
                 <button
                   onClick={handleSubmitCode}
                   disabled={isGrading || !codeDraft}
-                  className="px-8 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl flex items-center gap-3 disabled:opacity-50 font-black shadow-lg shadow-primary/30 active:scale-95 transition-all">
+                  className="w-full sm:w-auto px-8 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl flex items-center justify-center gap-3 disabled:opacity-50 font-black shadow-lg shadow-primary/30 active:scale-95 transition-all order-1 sm:order-2">
                   {isGrading ? <Activity className="animate-spin" size={20} /> : <GraduationCap size={20} />}
-                  {isGrading ? 'YAPAY ZEKA ANALİZ EDİYOR...' : 'DEĞERLENDİRMEYE GÖNDER'}
+                  <span className="sm:whitespace-nowrap">{isGrading ? 'YAPAY ZEKA ANALİZ EDİYOR...' : 'DEĞERLENDİRMEYE GÖNDER'}</span>
                 </button>
               </div>
+
             </div>
           </div>
         )}
@@ -825,25 +830,26 @@ const AppContent = () => {
           <ChevronRight className="rotate-180 group-hover:-translate-x-1 transition-transform" size={20} /> GERİ DÖN
         </button>
 
-        <div className="bg-dark-800 p-8 rounded-2xl border border-dark-700 shadow-xl overflow-hidden relative">
+        <div className="bg-dark-800 p-6 sm:p-8 rounded-2xl border border-dark-700 shadow-xl overflow-hidden relative">
           <div className="absolute top-0 right-0 p-8 opacity-5">
             <FileCode size={120} />
           </div>
-          <div className="relative z-10 flex justify-between items-start">
+          <div className="relative z-10 flex flex-col md:flex-row justify-between items-start gap-6">
             <div className="max-w-3xl">
-              <h1 className="text-4xl font-black text-white mb-4 tracking-tighter">{selectedAssignment.title}</h1>
-              <p className="text-slate-400 text-lg leading-relaxed">{selectedAssignment.description}</p>
+              <h1 className="text-2xl sm:text-4xl font-black text-white mb-4 tracking-tighter">{selectedAssignment.title}</h1>
+              <p className="text-slate-400 text-base sm:text-lg leading-relaxed">{selectedAssignment.description}</p>
             </div>
-            <span className="px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-black uppercase tracking-widest">
+            <span className="px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary text-[10px] sm:text-xs font-black uppercase tracking-widest whitespace-nowrap">
               {selectedAssignment.studentLevel} Seviye
             </span>
           </div>
 
-          <div className="flex gap-6 mt-10">
+          <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 mt-10">
             <div className="bg-dark-900/50 p-6 rounded-2xl border border-dark-700 flex-1">
               <span className="block text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-2">Toplam Teslim</span>
-              <span className="text-4xl font-black text-white">{assignmentSubmissions.length}</span>
+              <span className="text-3xl sm:text-4xl font-black text-white">{assignmentSubmissions.length}</span>
             </div>
+
             <div className="bg-dark-900/50 p-6 rounded-2xl border border-dark-700 flex-1">
               <span className="block text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-2">Sınıf Ortalaması</span>
               <span className="text-4xl font-black text-primary">
@@ -1396,8 +1402,9 @@ const AppContent = () => {
           </button>
         </div>
 
-        <div className="bg-dark-800 rounded-2xl border border-dark-700 overflow-hidden shadow-2xl">
-          <table className="w-full text-left">
+        <div className="bg-dark-800 rounded-2xl border border-dark-700 overflow-hidden shadow-2xl overflow-x-auto">
+          <table className="w-full text-left min-w-[600px]">
+
             <thead className="bg-dark-700/80 text-slate-400 text-[10px] font-black uppercase tracking-[0.15em]">
               <tr>
                 <th className="px-8 py-5 font-bold">Başlık</th>
