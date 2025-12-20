@@ -15,6 +15,23 @@ models.Base.metadata.create_all(bind=engine)
 from .initial_data import create_admin_user
 create_admin_user()
 
+# Auto-migration for SQLite (Poor man's migration)
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
+try:
+    with engine.connect() as conn:
+        try:
+            # Try to select the new column to see if it exists
+            conn.execute(text("SELECT created_at FROM assignments LIMIT 1"))
+        except OperationalError:
+            # If it fails, add the column
+            print("Migrating database: Adding 'created_at' to assignments...")
+            conn.execute(text("ALTER TABLE assignments ADD COLUMN created_at DATETIME"))
+            conn.commit()
+            print("Migration successful.")
+except Exception as e:
+    print(f"Migration check failed (might be already correct or other issue): {e}")
+
 
 
 app = FastAPI(
