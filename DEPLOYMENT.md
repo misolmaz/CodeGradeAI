@@ -5,7 +5,7 @@ Bu kılavuz, CodeGradeAI projesini Hostinger VPS üzerinde yayınlamanız için 
 ## 1. Hazırlık
 Projenizi GitHub'a yüklemeden önce:
 - `backend/.env` dosyanızın (API anahtarınızın olduğu yer) `.gitignore` içinde olduğundan emin olun.
-- Hostinger VPS'inizde **Docker** ve **Docker Compose** kurulu olmalıdır.
+- Hostinger VPS'inizde **Docker** ve **Docker Compose** kurulu olmalıdır. (coolify için gerek yok)
 
 ## 2. GitHub'a Gönderme
 ```bash
