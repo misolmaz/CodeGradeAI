@@ -33,6 +33,13 @@ git push -u origin main
    docker-compose up -d --build
    ```
 
+### 💡 Veri Kaybını Önleme (Persistence)
+Önceki sürümlerde veritabanı dosya yolu bağımlı olduğu için resetlemelerde veri siliniyordu. Yeni sürümde **Docker Named Volumes** (`db_data`) yapısına geçtik.
+
+**Coolify Kullanıyorsanız:**
+- Coolify üzerinde "Storage" veya "Volumes" sekmesinde `/app/data` klasörünün kalıcı bir volume olarak tanımlandığından emin olun.
+- `DATABASE_URL=sqlite:////app/data/sql_app.db` çevresel değişkeninin tanımlı olduğundan emin olun.
+
 ## Önemli Notlar
 - SQL dosyası (`sql_app.db`) Docker volume olarak bağlandığı için VPS üzerinde kalıcıdır.
 - Frontend 80 portundan, Backend 8000 portundan hizmet verecektir.

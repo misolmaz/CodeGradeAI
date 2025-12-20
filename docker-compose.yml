@@ -9,8 +9,10 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ALLOWED_ORIGINS=http://your-vps-ip,http://your-domain.com
       - PORT=8000
+      - DATABASE_URL=sqlite:////app/data/sql_app.db
+
     volumes:
-      - ./backend/sql_app.db:/app/sql_app.db
+      - db_data:/app/data
 
   frontend:
     build:
@@ -21,3 +23,8 @@ services:
       - "80:80"
     depends_on:
       - backend
+
+volumes:
+  db_data:
+
+

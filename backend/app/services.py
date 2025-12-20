@@ -61,13 +61,18 @@ def process_excel_upload(file_contents: bytes, db: Session):
 # ... (Existing Gemini functions) ...
 
 # Initialize Gemini
-API_KEY = os.getenv("GOOGLE_API_KEY")
-MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+# Check both GEMINI_API_KEY and GOOGLE_API_KEY for service compatibility
+API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+# Default to the most universal stable model if not specified
+MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+
+
 
 if not API_KEY:
-    print("WARNING: GOOGLE_API_KEY is not set in environment variables.")
+    print("WARNING: API Key (GEMINI_API_KEY or GOOGLE_API_KEY) is not set in environment variables.")
 else:
     genai.configure(api_key=API_KEY)
+
 
 def get_system_instruction(student_level: str) -> str:
     # Configurations based on level
