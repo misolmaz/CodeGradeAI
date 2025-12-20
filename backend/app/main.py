@@ -12,6 +12,10 @@ load_dotenv()
 
 # Create Database Tables
 models.Base.metadata.create_all(bind=engine)
+from .initial_data import create_admin_user
+create_admin_user()
+
+
 
 app = FastAPI(
     title="CodeGradeAI Backend",

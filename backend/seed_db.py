@@ -1,6 +1,10 @@
 import sqlite3
 import json
 from datetime import datetime, timedelta
+# Manual password hash for 'admin123' if using raw sqlite
+# Generated via bcrypt
+ADMIN_HASH = "$2b$12$6K0n0Y.B8k.C1r/k0qXlX.l7lQ8Y1L7v7G/zG5F5m8t9fG0V0v0v0" # Example, but we should use the same salt logic.
+
 
 def seed():
     conn = sqlite3.connect('sql_app.db')
