@@ -46,7 +46,7 @@ class AssignmentCreate(AssignmentBase):
 
 class AssignmentOut(AssignmentBase):
     id: int
-    created_at: datetime
+    created_at: datetime | None = None
     class Config:
         from_attributes = True
 
