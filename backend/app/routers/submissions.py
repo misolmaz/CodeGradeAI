@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime
 from ..database import get_db
-from ..models import Submission, User
+from ..models import Submission, User, Assignment
 from ..schemas import SubmissionCreate, SubmissionOut
 from .users import get_current_user
 
@@ -14,6 +15,22 @@ async def create_submission(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Deadline Check
+    assignment = db.query(Assignment).filter(Assignment.id == submission.assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Ödev bulunamadı")
+    
+    if assignment.due_date:
+        try:
+            # Handle ISO format from seed or simple date string
+            # If ISO format ends with Z or +00:00, fromisoformat handles it (Python 3.11+ better, but 3.9+ supports basic)
+            # Our seed uses .isoformat(), which usually gives 'YYYY-MM-DDTHH:MM:SS.mmmmmm'
+            deadline = datetime.fromisoformat(assignment.due_date)
+            if datetime.now() > deadline:
+                raise HTTPException(status_code=400, detail="Bu ödevin teslim süresi dolmuştur.")
+        except ValueError:
+            pass # Invalid date format in DB, skipping check for safety
+
     db_submission = Submission(
         user_id=current_user.id,
         assignment_id=submission.assignment_id,

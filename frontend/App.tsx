@@ -22,6 +22,27 @@ import 'prismjs/components/prism-python';
 import 'prismjs/themes/prism-tomorrow.css';
 import { API_BASE_URL } from './config';
 
+// --- Helpers ---
+const calculateTimeRemaining = (dueDateString: string): string => {
+  const now = new Date();
+  const due = new Date(dueDateString);
+  const diff = due.getTime() - now.getTime();
+
+  if (diff <= 0) return "Süre Doldu";
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (days > 0) return `${days} gün ${hours} saat`;
+  if (hours > 0) return `${hours} saat ${minutes} dk`;
+  return `${minutes} dk`;
+};
+
+const isDeadlinePassed = (dueDateString: string): boolean => {
+  return new Date(dueDateString).getTime() < new Date().getTime();
+};
+
 
 
 
@@ -520,6 +541,12 @@ const AppContent = () => {
                             🎯 {assignment.targetType === 'class' ? `Sınıf: ${assignment.targetClass}` : 'Seçili Öğrenciler'}
                           </span>
                         )}
+                        <span className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border font-bold uppercase tracking-tighter flex items-center gap-1 ${isDeadlinePassed(assignment.dueDate)
+                            ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                            : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                          }`}>
+                          <Clock size={12} /> {calculateTimeRemaining(assignment.dueDate) === "Süre Doldu" ? "Süre Doldu" : `${calculateTimeRemaining(assignment.dueDate)} Kaldı`}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -773,6 +800,11 @@ const AppContent = () => {
                   <X size={20} />
                 </button>
               </div>
+              {isDeadlinePassed(selectedAssignment.dueDate) && (
+                <div className="bg-rose-500/10 border-b border-rose-500/20 p-3 text-center text-rose-400 text-xs font-black uppercase tracking-widest">
+                  ⚠️ Bu ödevin teslim süresi dolmuştur
+                </div>
+              )}
               <div className="p-4 sm:p-8 flex-1 overflow-y-auto space-y-6">
                 <div className="bg-dark-900/80 p-4 sm:p-6 rounded-2xl border border-dark-700 text-slate-300">
                   <h4 className="text-[10px] sm:text-sm font-black text-slate-500 uppercase tracking-widest mb-3">Soru/Tanım</h4>
@@ -808,10 +840,14 @@ const AppContent = () => {
                 <button onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto px-6 py-2.5 text-slate-400 hover:text-white font-bold transition-colors order-2 sm:order-1">İptal</button>
                 <button
                   onClick={handleSubmitCode}
-                  disabled={isGrading || !codeDraft}
-                  className="w-full sm:w-auto px-8 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl flex items-center justify-center gap-3 disabled:opacity-50 font-black shadow-lg shadow-primary/30 active:scale-95 transition-all order-1 sm:order-2">
+                  disabled={isGrading || !codeDraft || isDeadlinePassed(selectedAssignment.dueDate)}
+                  className="w-full sm:w-auto px-8 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed font-black shadow-lg shadow-primary/30 active:scale-95 transition-all order-1 sm:order-2">
                   {isGrading ? <Activity className="animate-spin" size={20} /> : <GraduationCap size={20} />}
-                  <span className="sm:whitespace-nowrap">{isGrading ? 'YAPAY ZEKA ANALİZ EDİYOR...' : 'DEĞERLENDİRMEYE GÖNDER'}</span>
+                  <span className="sm:whitespace-nowrap">
+                    {isDeadlinePassed(selectedAssignment.dueDate)
+                      ? 'SÜRE DOLDU'
+                      : (isGrading ? 'YAPAY ZEKA ANALİZ EDİYOR...' : 'DEĞERLENDİRMEYE GÖNDER')}
+                  </span>
                 </button>
               </div>
 
