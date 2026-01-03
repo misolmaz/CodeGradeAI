@@ -10,6 +10,12 @@ export interface User {
   avatar: string;
 }
 
+export interface Badge {
+  name: string;
+  icon: string;
+  description: string;
+}
+
 export interface Assignment {
   id: string;
   title: string;
@@ -46,6 +52,7 @@ export interface Submission {
   submittedAt: string;
   gradingResult?: GradingResult;
   status: 'pending' | 'graded';
+  newBadges?: Badge[];
 }
 
 export interface Announcement {

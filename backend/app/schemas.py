@@ -3,6 +3,12 @@ from typing import List, Literal
 from datetime import datetime
 
 
+
+class Badge(BaseModel):
+    name: str
+    icon: str
+    description: str
+
 class UnitTestResult(BaseModel):
     testName: str = Field(..., description="Test senaryosunun adı")
     passed: bool = Field(..., description="Testin geçip geçmediği")
@@ -77,6 +83,7 @@ class SubmissionOut(BaseModel):
     code_content: str
     grading_result: str
     submitted_at: datetime
+    new_badges: List[Badge] = []
 
     class Config:
         from_attributes = True

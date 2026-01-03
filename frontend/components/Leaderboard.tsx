@@ -1,7 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE_URL } from '../config';
-import { Trophy, Medal, Flame, Target, Star, Crown, Shield } from 'lucide-react';
+import { Trophy, Medal, Flame, Target, Star, Crown, Shield, Zap, Sparkles, HelpCircle, X } from 'lucide-react';
+import { Badge as BadgeType } from '../types';
+
+const BADGE_RULES = [
+    { name: "First Step", icon: "Trophy", description: "İlk ödevini başarıyla (skor > 0) tamamla." },
+    { name: "Fast & Furious", icon: "Zap", description: "Bir ödevi yayınlandıktan sonraki 12 saat içinde yüksek puanla (>= 80) tamamla." },
+    { name: "Clean Code Architect", icon: "Sparkles", description: "3 farklı ödevden 95 ve üzeri puan al." },
+    { name: "Bug Hunter", icon: "Shield", description: "5 farklı ödevi başarıyla tamamla." },
+    { name: "On Fire", icon: "Flame", description: "5 gün arka arkaya kod gönder." }
+];
+
+const BADGE_ICONS: Record<string, any> = {
+    "Trophy": Trophy,
+    "Zap": Zap,
+    "Sparkles": Sparkles,
+    "Shield": Shield,
+    "Flame": Flame
+};
 
 export interface LeaderboardEntry {
     rank: number;
@@ -12,7 +29,7 @@ export interface LeaderboardEntry {
     average_score: number;
     completed_tasks: number;
     streak: boolean;
-    badges: string[];
+    badges: BadgeType[];
 }
 
 export const Leaderboard = () => {
@@ -20,6 +37,7 @@ export const Leaderboard = () => {
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [filterClass, setFilterClass] = useState<string>('');
+    const [isRulesOpen, setIsRulesOpen] = useState(false);
 
     useEffect(() => {
         fetchLeaderboard();
@@ -67,10 +85,19 @@ export const Leaderboard = () => {
         <div className="space-y-6 animate-in fade-in duration-500 pb-24">
             <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                        <Trophy className="text-yellow-500" />
-                        Liderlik Tablosu
-                    </h2>
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                            <Trophy className="text-yellow-500" />
+                            Liderlik Tablosu
+                        </h2>
+                        <button
+                            onClick={() => setIsRulesOpen(true)}
+                            className="bg-dark-700/50 hover:bg-dark-700 text-slate-400 hover:text-white p-1.5 rounded-full transition-colors"
+                            title="Rozet Kuralları"
+                        >
+                            <HelpCircle size={18} />
+                        </button>
+                    </div>
                     <p className="text-slate-400 text-sm mt-1">En yüksek XP toplayan öğrenciler ve başarı sıralaması</p>
                 </div>
 
@@ -117,18 +144,34 @@ export const Leaderboard = () => {
                                     {entry.username === currentUsername && <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full">SEN</span>}
                                 </h3>
                                 <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
-                                    <span className="flex items-center gap-1" title="Ortalama Başarı">
-                                        <Target size={14} /> %{entry.average_score}
-                                    </span>
-                                    <span className="flex items-center gap-1" title="Tamamlanan Görev">
+                                    <span className="flex items-center gap-1">
                                         <Shield size={14} /> {entry.completed_tasks} Görev
                                     </span>
                                     {entry.streak && (
-                                        <span className="flex items-center gap-1 text-orange-400 font-bold" title="Haftalık Seri">
+                                        <span className="flex items-center gap-1 text-orange-400 font-bold">
                                             <Flame size={14} /> Streak!
                                         </span>
                                     )}
                                 </div>
+                                {/* Badges */}
+                                {entry.badges && entry.badges.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 mt-2">
+                                        {entry.badges.map((badge, idx) => {
+                                            const Icon = BADGE_ICONS[badge.icon] || Star;
+                                            return (
+                                                <div key={idx} className="group/badge relative cursor-help">
+                                                    <div className="p-1 rounded-full bg-dark-700/50 hover:bg-yellow-500/20 text-yellow-500/50 group-hover/badge:text-yellow-400 transition-all border border-transparent group-hover/badge:border-yellow-500/30">
+                                                        <Icon size={14} />
+                                                    </div>
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-dark-900/90 backdrop-blur-md text-white text-[10px] p-3 rounded-xl border border-dark-600 shadow-xl opacity-0 group-hover/badge:opacity-100 transition-opacity pointer-events-none z-50">
+                                                        <p className="font-bold text-primary mb-0.5">{badge.name}</p>
+                                                        <p className="text-slate-300 leading-snug">{badge.description}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="text-right flex-shrink-0">
@@ -163,6 +206,48 @@ export const Leaderboard = () => {
                                 <span className="block text-xs text-slate-400 uppercase font-bold">Görev</span>
                                 <span className="font-bold text-white">{currentUserEntry.completed_tasks}</span>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Badge Rules Modal */}
+            {isRulesOpen && (
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+                    onClick={() => setIsRulesOpen(false)}
+                >
+                    <div
+                        className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-5 border-b border-dark-700 flex justify-between items-center bg-dark-900/50">
+                            <h3 className="font-bold text-white flex items-center gap-2">
+                                <Medal className="text-yellow-500" size={20} />
+                                Rozet Kazanma Kuralları
+                            </h3>
+                            <button
+                                onClick={() => setIsRulesOpen(false)}
+                                className="text-slate-500 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                            {BADGE_RULES.map((rule, idx) => {
+                                const Icon = BADGE_ICONS[rule.icon] || Star;
+                                return (
+                                    <div key={idx} className="flex items-start gap-4 p-3 bg-dark-900/30 rounded-xl border border-dark-700/50">
+                                        <div className="p-2 bg-dark-800 rounded-lg text-yellow-500 border border-dark-700">
+                                            <Icon size={20} />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-white text-sm">{rule.name}</h4>
+                                            <p className="text-slate-400 text-xs mt-1 leading-relaxed">{rule.description}</p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>

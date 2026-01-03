@@ -158,7 +158,9 @@ const AppContent = () => {
   const [profileNewAvatar, setProfileNewAvatar] = useState('');
   const [profileFullName, setProfileFullName] = useState('');
   const [profileLoading, setProfileLoading] = useState(false);
+
   const [profileMsg, setProfileMsg] = useState({ type: '', text: '' });
+  const [toast, setToast] = useState<{ title: string; msg: string; visible: boolean } | null>(null);
 
   useEffect(() => {
     if (avatarUrl) setProfileNewAvatar(avatarUrl);
@@ -311,7 +313,9 @@ const AppContent = () => {
         grading_result: JSON.stringify(gradingResult)
       };
 
-      const res = await fetch(`${API_BASE_URL}/submissions//`, {
+
+
+      const res = await fetch(`${API_BASE_URL}/submissions/`, {
 
         method: 'POST',
         headers: {
@@ -322,6 +326,19 @@ const AppContent = () => {
       });
 
       if (res.ok) {
+        const responseData = await res.json();
+
+        // Check new badges
+        if (responseData.new_badges && responseData.new_badges.length > 0) {
+          const badgeNames = responseData.new_badges.map((b: any) => b.name).join(", ");
+          setToast({
+            title: "Tebrikler! Yeni Rozet Kazandın!",
+            msg: `Harika iş! "${badgeNames}" rozetini profiline ekledik.`,
+            visible: true
+          });
+          setTimeout(() => setToast(null), 8000);
+        }
+
         fetchAllData();
         setCurrentView('home');
         setCodeDraft('');
@@ -542,8 +559,8 @@ const AppContent = () => {
                           </span>
                         )}
                         <span className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border font-bold uppercase tracking-tighter flex items-center gap-1 ${isDeadlinePassed(assignment.dueDate)
-                            ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
-                            : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                          ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                          : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                           }`}>
                           <Clock size={12} /> {calculateTimeRemaining(assignment.dueDate) === "Süre Doldu" ? "Süre Doldu" : `${calculateTimeRemaining(assignment.dueDate)} Kaldı`}
                         </span>
@@ -1547,6 +1564,21 @@ const AppContent = () => {
       {currentView === 'profile' && renderProfileView()}
       {currentView === 'leaderboard' && <Leaderboard />}
       {selectedSubmission && renderSubmissionDetailModal()}
+
+      {toast && toast.visible && (
+        <div className="fixed top-6 right-6 z-[200] animate-in slide-in-from-right duration-500">
+          <div className="bg-dark-800 border-l-4 border-yellow-500 p-6 rounded-xl shadow-2xl flex items-start gap-4 max-w-sm border border-dark-700">
+            <div className="p-3 bg-yellow-500/10 rounded-full text-yellow-500 flex-shrink-0 animate-bounce">
+              <Award size={32} />
+            </div>
+            <div>
+              <h4 className="font-bold text-white text-lg leading-tight">{toast.title}</h4>
+              <p className="text-slate-400 text-sm mt-1 leading-snug">{toast.msg}</p>
+            </div>
+            <button onClick={() => setToast(null)} className="text-slate-500 hover:text-white absolute top-4 right-4"><X size={18} /></button>
+          </div>
+        </div>
+      )}
 
     </Layout>
   );

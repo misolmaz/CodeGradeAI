@@ -16,6 +16,7 @@ class User(Base):
     avatar_url = Column(String, nullable=True)
 
     submissions = relationship("Submission", back_populates="owner")
+    badges = relationship("UserBadge", back_populates="user")
 
 class Assignment(Base):
     __tablename__ = "assignments"
@@ -56,3 +57,12 @@ class Announcement(Base):
     type = Column(String, default="info") # info, warning
     date = Column(String) # Storage as string for direct display
 
+class UserBadge(Base):
+    __tablename__ = "user_badges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    badge_name = Column(String, index=True) # e.g., 'FirstStep'
+    earned_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="badges")

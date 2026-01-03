@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..models import User, Submission, Assignment
+from ..models import User, Submission, Assignment, UserBadge
 import json
 from datetime import datetime, timedelta
 from typing import List, Optional
 from pydantic import BaseModel
+from ..schemas import Badge
+from ..badges import BADGE_DEFINITIONS
 
 router = APIRouter(
     prefix="/leaderboard",
@@ -21,7 +23,8 @@ class LeaderboardEntry(BaseModel):
     average_score: int
     completed_tasks: int
     streak: bool
-    badges: List[str]
+
+    badges: List[Badge]
 
 @router.get("/", response_model=List[LeaderboardEntry])
 async def get_leaderboard(class_code: Optional[str] = None, db: Session = Depends(get_db)):
@@ -36,6 +39,21 @@ async def get_leaderboard(class_code: Optional[str] = None, db: Session = Depend
     # Fetch all relevant submissions
     submissions = db.query(Submission).filter(Submission.user_id.in_(student_ids)).all()
     
+    # Fetch all badges
+    earned_badges = db.query(UserBadge).filter(UserBadge.user_id.in_(student_ids)).all()
+    user_badges_map = {}
+    for b in earned_badges:
+        if b.user_id not in user_badges_map:
+            user_badges_map[b.user_id] = []
+        
+        if b.badge_name in BADGE_DEFINITIONS:
+            def_ = BADGE_DEFINITIONS[b.badge_name]
+            user_badges_map[b.user_id].append(Badge(
+                name=b.badge_name,
+                icon=def_["icon"],
+                description=def_["description"]
+            ))
+    
     # Process data
     leaderboard_data = []
     
@@ -47,7 +65,6 @@ async def get_leaderboard(class_code: Optional[str] = None, db: Session = Depend
         best_attempts = {}
         
         has_streak = False
-        last_7_days = datetime.utcnow() - timedelta(days=7)
         
         for sub in student_subs:
             try:
@@ -64,38 +81,44 @@ async def get_leaderboard(class_code: Optional[str] = None, db: Session = Depend
                 bonus_xp += 5
             
             # Early Bird Bonus
-            # We need to access the assignment. Since lazy loading might be slow in loop, 
-            # ideally we should have eager loaded or fetched assignments.
-            # For this scale, accessing sub.assignment is acceptable, but let's be safe.
             assignment = sub.assignment
             if assignment and assignment.created_at:
-                # If submitted within 24 hours of creation
                 if sub.submitted_at <= assignment.created_at + timedelta(hours=24):
                     bonus_xp += 10
             
             total_attempt_xp = score + bonus_xp
             
-            # Streak Check
-            if sub.submitted_at >= last_7_days:
-                has_streak = True
-            
-            # Update best attempt
+            # Update best attempt logic (INSIDE LOOP)
             aid = sub.assignment_id
             if aid is not None:
                 if aid not in best_attempts:
                     best_attempts[aid] = {"score": score, "xp": total_attempt_xp}
                 else:
-                    # Keep the one with highest score, or highest XP if scores tie? 
-                    # Usually highest grade matters most.
                     if score > best_attempts[aid]["score"]:
                          best_attempts[aid] = {"score": score, "xp": total_attempt_xp}
                     elif score == best_attempts[aid]["score"]:
                          if total_attempt_xp > best_attempts[aid]["xp"]:
                              best_attempts[aid]["xp"] = total_attempt_xp
 
+        # Calculate Streak (OUTSIDE LOOP)
+        submission_dates = sorted({s.submitted_at.date() for s in student_subs})
+        current_streak = 0
+        if submission_dates:
+            today = datetime.utcnow().date()
+            last_sub_date = submission_dates[-1]
+            if (today - last_sub_date).days <= 1:
+                current_streak = 1
+                for i in range(len(submission_dates) - 1, 0, -1):
+                    if (submission_dates[i] - submission_dates[i-1]).days == 1:
+                        current_streak += 1
+                    else:
+                        break
+        
+        has_streak = current_streak >= 3
+
         # Aggregation
         total_xp = sum(item["xp"] for item in best_attempts.values())
-        completed_tasks = sum(1 for item in best_attempts.values() if item["score"] >= 70)
+        completed_tasks = sum(1 for item in best_attempts.values() if item["score"] >= 1)
         
         avg_score = 0
         if best_attempts:
@@ -109,7 +132,7 @@ async def get_leaderboard(class_code: Optional[str] = None, db: Session = Depend
             "average_score": round(avg_score),
             "completed_tasks": completed_tasks,
             "streak": has_streak,
-            "badges": [] # Placeholder for now as per requirements
+            "badges": user_badges_map.get(student.id, [])
         })
     
     # Sort by Total XP Descending

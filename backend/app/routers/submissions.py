@@ -4,8 +4,9 @@ from typing import List
 from datetime import datetime
 from ..database import get_db
 from ..models import Submission, User, Assignment
-from ..schemas import SubmissionCreate, SubmissionOut
+from ..schemas import SubmissionCreate, SubmissionOut, Badge
 from .users import get_current_user
+from ..badges import check_badges
 
 router = APIRouter(prefix="/submissions", tags=["Submissions"])
 
@@ -40,7 +41,18 @@ async def create_submission(
     db.add(db_submission)
     db.commit()
     db.refresh(db_submission)
-    return db_submission
+    db.refresh(db_submission)
+    
+    # Check Badges
+    new_badges_data = check_badges(current_user.id, db, db_submission.id)
+    
+    # Convert to Pydantic model response
+    response = SubmissionOut.model_validate(db_submission)
+    # Manually populate computed fields if needed (student_name usually None in simple mapping unless hybrid prop)
+    response.student_name = current_user.full_name 
+    response.new_badges = [Badge(**b) for b in new_badges_data]
+                      
+    return response
 
 @router.get("/", response_model=List[SubmissionOut])
 async def get_submissions(
