@@ -27,7 +27,11 @@ async def create_submission(
             # If ISO format ends with Z or +00:00, fromisoformat handles it (Python 3.11+ better, but 3.9+ supports basic)
             # Our seed uses .isoformat(), which usually gives 'YYYY-MM-DDTHH:MM:SS.mmmmmm'
             deadline = datetime.fromisoformat(assignment.due_date)
-            if datetime.now() > deadline:
+            # Ensure both are offset-naive for comparison to avoid TypeError
+            if deadline.tzinfo:
+                deadline = deadline.replace(tzinfo=None)
+                
+            if datetime.utcnow() > deadline:
                 raise HTTPException(status_code=400, detail="Bu ödevin teslim süresi dolmuştur.")
         except ValueError:
             pass # Invalid date format in DB, skipping check for safety
