@@ -17,7 +17,7 @@ async def create_submission(
     current_user: User = Depends(get_current_user)
 ):
     # Deadline Check
-    assignment = db.query(Assignment).filter(Assignment.id == submission.assignment_id).first()
+    assignment = db.query(Assignment).filter(Assignment.id == submission.assignment_id, Assignment.organization_id == current_user.organization_id).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Ödev bulunamadı")
     
@@ -63,7 +63,7 @@ async def get_submissions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Submission)
+    query = db.query(Submission).join(User).filter(User.organization_id == current_user.organization_id)
     if current_user.role != "teacher":
         query = query.filter(Submission.user_id == current_user.id)
     
@@ -80,7 +80,7 @@ async def delete_submission(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    db_submission = db.query(Submission).filter(Submission.id == submission_id).first()
+    db_submission = db.query(Submission).join(User).filter(Submission.id == submission_id, User.organization_id == current_user.organization_id).first()
     if not db_submission:
         raise HTTPException(status_code=404, detail="Teslimat bulunamadı")
     

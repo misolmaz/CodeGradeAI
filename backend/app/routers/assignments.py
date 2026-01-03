@@ -18,6 +18,7 @@ async def create_assignment(
         raise HTTPException(status_code=403, detail="Sadece öğretmenler ödev oluşturabilir")
     
     db_assignment = Assignment(**assignment.dict())
+    db_assignment.organization_id = current_user.organization_id
     db.add(db_assignment)
     db.commit()
     db.refresh(db_assignment)
@@ -31,7 +32,8 @@ async def get_assignments(
     # Teachers see all, students might have filtering logic here or on frontend
     # For now, let's return all, and let frontend filter for simplicity like before,
     # or implement filtering here.
-    return db.query(Assignment).all()
+    # Filter by Organization
+    return db.query(Assignment).filter(Assignment.organization_id == current_user.organization_id).all()
 
 @router.delete("/{assignment_id}")
 async def delete_assignment(
@@ -42,7 +44,7 @@ async def delete_assignment(
     if current_user.role != "teacher":
         raise HTTPException(status_code=403, detail="Yetkiniz yok")
     
-    db_assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    db_assignment = db.query(Assignment).filter(Assignment.id == assignment_id, Assignment.organization_id == current_user.organization_id).first()
     if not db_assignment:
         raise HTTPException(status_code=404, detail="Ödev bulunamadı")
     
@@ -59,7 +61,7 @@ async def update_assignment(
     if current_user.role != "teacher":
         raise HTTPException(status_code=403, detail="Yetkiniz yok")
     
-    db_assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    db_assignment = db.query(Assignment).filter(Assignment.id == assignment_id, Assignment.organization_id == current_user.organization_id).first()
     if not db_assignment:
         raise HTTPException(status_code=404, detail="Ödev bulunamadı")
     

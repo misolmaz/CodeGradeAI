@@ -12,8 +12,8 @@ load_dotenv()
 
 # Create Database Tables
 models.Base.metadata.create_all(bind=engine)
-from .initial_data import create_admin_user
-create_admin_user()
+from .initial_data import create_initial_data
+create_initial_data()
 
 # Auto-migration for SQLite (Poor man's migration)
 from sqlalchemy import text

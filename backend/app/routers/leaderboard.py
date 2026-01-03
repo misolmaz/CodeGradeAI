@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import User, Submission, Assignment, UserBadge
+from .users import get_current_user
 import json
 from datetime import datetime, timedelta
 from typing import List, Optional
@@ -27,9 +28,13 @@ class LeaderboardEntry(BaseModel):
     badges: List[Badge]
 
 @router.get("/", response_model=List[LeaderboardEntry])
-async def get_leaderboard(class_code: Optional[str] = None, db: Session = Depends(get_db)):
-    # Base query for students
-    users_query = db.query(User).filter(User.role == "student")
+async def get_leaderboard(
+    class_code: Optional[str] = None, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Base query for students in current org
+    users_query = db.query(User).filter(User.role == "student", User.organization_id == current_user.organization_id)
     if class_code:
         users_query = users_query.filter(User.class_code == class_code)
     

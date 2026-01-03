@@ -1,12 +1,23 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text, DateTime
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text, DateTime, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    users = relationship("User", back_populates="organization")
+    assignments = relationship("Assignment", back_populates="organization")
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True) # Multitenant ID
     student_number = Column(String, unique=True, index=True)
     full_name = Column(String)
     password_hash = Column(String)
@@ -15,6 +26,7 @@ class User(Base):
     is_first_login = Column(Boolean, default=True)
     avatar_url = Column(String, nullable=True)
 
+    organization = relationship("Organization", back_populates="users")
     submissions = relationship("Submission", back_populates="owner")
     badges = relationship("UserBadge", back_populates="user")
 
@@ -22,17 +34,19 @@ class Assignment(Base):
     __tablename__ = "assignments"
 
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True) # Multitenant ID
     title = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     description = Column(Text)
-    due_date = Column(String) # For simplicity, storing as string or use DateTime
+    due_date = Column(String) # For simplicity, storing as string. Ideally migrate to DateTime
     language = Column(String)
     student_level = Column(String) # beginner, intermediate, advanced
     status = Column(String, default="active") # active, expired
     target_type = Column(String, default="all") # all, class, specific
     target_class = Column(String, nullable=True)
-    target_students = Column(Text, nullable=True) # Stored as comma-separated or JSON list
+    target_students = Column(JSON, nullable=True) # Converted to JSON for PG
 
+    organization = relationship("Organization", back_populates="assignments")
     submissions = relationship("Submission", back_populates="assignment")
 
 class Submission(Base):
@@ -42,7 +56,7 @@ class Submission(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=True)
     code_content = Column(Text)
-    grading_result = Column(Text) # JSON string of GradingResult
+    grading_result = Column(JSON) # Converted to JSON for PG
     submitted_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="submissions")
@@ -52,6 +66,7 @@ class Announcement(Base):
     __tablename__ = "announcements"
 
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True) # Optional Multitenant
     title = Column(String)
     content = Column(Text)
     type = Column(String, default="info") # info, warning
