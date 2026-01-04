@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text, DateTime, JSON
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text, DateTime, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -16,10 +16,11 @@ class Organization(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint('student_number', 'organization_id', name='_student_org_uc'),)
 
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
-    student_number = Column(String, unique=True, index=True) # Username
+    student_number = Column(String, index=True) # Username (not unique globally anymore)
     full_name = Column(String)
     password_hash = Column(String)
     role = Column(String) # 'student', 'teacher', 'superadmin'

@@ -20,6 +20,14 @@ async def upload_students(
 ):
     if current_user.role not in ["teacher", "superadmin"]:
         raise HTTPException(status_code=403, detail="Yetkisiz işlem")
+    
+    # Enforce uploading to OWN tenant only
+    if not current_user.organization_id and current_user.role == "superadmin":
+         # Maybe allow SA to specify org_id in future, but for now restrict
+         raise HTTPException(status_code=400, detail="Süper Admin bir öğretim üyesi hesabına geçiş yapmadan öğrenci yükleyemez.")
+    
+    if not current_user.organization_id:
+        raise HTTPException(status_code=400, detail="Bir organizasyona bağlı değilsiniz.")
 
     if not file.filename.endswith(('.xls', '.xlsx')):
         raise HTTPException(status_code=400, detail="Sadece Excel dosyaları kabul edilir.")
@@ -185,13 +193,17 @@ async def get_all_tenants(
         owner = db.query(User).filter(User.organization_id == org.id, User.role == "teacher").first()
         student_count = db.query(User).filter(User.organization_id == org.id, User.role == "student").count()
         
+        # If no owner found (rare, maybe SA created org but deleted user), handle gracefully
+        owner_name = owner.full_name if owner else "---"
+        owner_email = owner.student_number if owner else "---"
+
         results.append({
             "id": org.id,
             "name": org.name,
             "is_active": org.is_active,
             "created_at": org.created_at,
-            "owner_name": owner.full_name if owner else "Bilinmiyor",
-            "owner_email": owner.student_number if owner else "-",
+            "owner_name": owner_name,
+            "owner_email": owner_email,
             "student_count": student_count
         })
     

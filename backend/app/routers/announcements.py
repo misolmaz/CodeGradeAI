@@ -15,9 +15,12 @@ async def create_announcement(
     current_user: User = Depends(get_current_user)
 ):
     if current_user.role not in ["teacher", "superadmin"]:
-        raise HTTPException(status_code=403, detail="Sadece öğretmenler duyuru yapabilir")
+        raise HTTPException(status_code=403, detail="Sadece öğretmenler ve yöneticiler duyuru yapabilir")
     
-    db_announcement = Announcement(**announcement.dict())
+    # If superadmin has no org, it's global (org_id=None). If teacher, uses their org_id.
+    org_id = current_user.organization_id
+    
+    db_announcement = Announcement(**announcement.dict(), organization_id=org_id)
     db.add(db_announcement)
     db.commit()
     db.refresh(db_announcement)
@@ -28,8 +31,22 @@ async def get_announcements(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+):
     print(f"DEBUG: Current user role: {current_user.role}")
-    return db.query(Announcement).all()
+    
+    if current_user.role == "superadmin":
+        # Superadmin sees everything (or maybe just global + their own if they had one, but pure SA sees all?)
+        # Let's say SuperAdmin sees ALL for management, but for 'viewing' context usually they see what they created.
+        # Actually, let's keep it simple: SuperAdmin sees ALL.
+        # WAIT, user request: "Süper Admin panelinden 'Global Duyuru' yapabilme..."
+        # So SA should see Global ones and filtered ones? Let's show ALL to SA.
+        return db.query(Announcement).all()
+        
+    # Teacher/Student sees Global (None) AND their Org's announcements
+    return db.query(Announcement).filter(
+        (Announcement.organization_id == current_user.organization_id) | 
+        (Announcement.organization_id == None)
+    ).all()
 
 @router.delete("/{announcement_id}")
 async def delete_announcement(

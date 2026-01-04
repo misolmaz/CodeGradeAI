@@ -30,16 +30,20 @@ def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = N
                 full_name = f"{row.get('Ad', '')} {row.get('Soyad', '')}".strip()
                 class_code = str(row.get('Sinif', ''))
                 
-                # Check if user exists
-                existing_user = db.query(User).filter(User.student_number == student_no).first()
+                # Check if user exists within the uploader's organization
+                # This enforces strict tenant isolation for students
+                org_id = admin_user.organization_id if admin_user else None
+                
+                existing_user = db.query(User).filter(
+                    User.student_number == student_no,
+                    User.organization_id == org_id
+                ).first()
                 
                 if existing_user:
                     # Update existing user info (except password/role)
                     existing_user.full_name = full_name
                     existing_user.class_code = class_code
-                    # Assign to current organization if not assigned (upsert logic for tenant)
-                    if admin_user and not existing_user.organization_id:
-                         existing_user.organization_id = admin_user.organization_id
+                    # Org ID consistency is already guaranteed by the query
                     
                     results["updated"] += 1
                 else:
