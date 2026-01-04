@@ -88,3 +88,8 @@ class SubmissionOut(BaseModel):
     class Config:
         from_attributes = True
 
+class TenantCreate(BaseModel):
+    org_name: str
+    teacher_username: str
+    teacher_password: str
+    teacher_fullname: str

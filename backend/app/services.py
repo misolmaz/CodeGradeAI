@@ -12,7 +12,7 @@ from .auth import get_password_hash
 load_dotenv()
 # ... (Gemini Init remains) ...
 
-def process_excel_upload(file_contents: bytes, db: Session):
+def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = None):
     try:
         # Read Excel file from bytes
         df = pd.read_excel(file_contents)
@@ -44,7 +44,8 @@ def process_excel_upload(file_contents: bytes, db: Session):
                     password_hash=hashed_pwd,
                     role="student",
                     class_code=class_code,
-                    is_first_login=True
+                    is_first_login=True,
+                    organization_id=admin_user.organization_id if admin_user else None
                 )
                 db.add(new_user)
                 results["added"] += 1
