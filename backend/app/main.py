@@ -15,22 +15,34 @@ models.Base.metadata.create_all(bind=engine)
 from .initial_data import create_initial_data
 create_initial_data()
 
-# Auto-migration for SQLite (Poor man's migration)
-from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
+# Auto-migration system
 try:
     with engine.connect() as conn:
+        # 1. Check assignments.created_at
         try:
-            # Try to select the new column to see if it exists
             conn.execute(text("SELECT created_at FROM assignments LIMIT 1"))
-        except OperationalError:
-            # If it fails, add the column
-            print("Migrating database: Adding 'created_at' to assignments...")
-            conn.execute(text("ALTER TABLE assignments ADD COLUMN created_at DATETIME"))
+        except Exception:
+            print("Migrating: Adding 'created_at' to assignments...")
+            # Detect DB type
+            if "postgres" in str(engine.url):
+                conn.execute(text("ALTER TABLE assignments ADD COLUMN created_at TIMESTAMP"))
+            else:
+                conn.execute(text("ALTER TABLE assignments ADD COLUMN created_at DATETIME"))
             conn.commit()
-            print("Migration successful.")
+
+        # 2. Check organizations.is_active
+        try:
+            conn.execute(text("SELECT is_active FROM organizations LIMIT 1"))
+        except Exception:
+            print("Migrating: Adding 'is_active' to organizations...")
+            if "postgres" in str(engine.url):
+                 conn.execute(text("ALTER TABLE organizations ADD COLUMN is_active BOOLEAN DEFAULT TRUE"))
+            else:
+                 conn.execute(text("ALTER TABLE organizations ADD COLUMN is_active BOOLEAN DEFAULT 1"))
+            conn.commit()
+
 except Exception as e:
-    print(f"Migration check failed (might be already correct or other issue): {e}")
+    print(f"Migration check warning: {e}")
 
 
 
