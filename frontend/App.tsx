@@ -9,6 +9,7 @@ import { TeacherDashboard } from './components/TeacherDashboard';
 import { Leaderboard } from './components/Leaderboard';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { SuperAdminHome } from './components/SuperAdminHome';
+import { LandingPage } from './components/LandingPage';
 
 import {
   Plus, Calendar, Clock, CheckCircle2, AlertCircle, FileCode,
@@ -53,10 +54,10 @@ const AppContent = () => {
   const { token, role, username, studentNumber, classCode, avatarUrl, userId, logout, updateAvatar, updateName } = useAuth();
 
 
-  // Initialize view from URL or default to 'home'
+  // Initialize view from URL or default to 'landing'
   const [currentView, setCurrentView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('view') || 'home';
+    return params.get('view') || 'landing';
   });
 
   // Handle Browser Back Button (PopState)
@@ -67,13 +68,20 @@ const AppContent = () => {
       if (view) {
         setCurrentView(view);
       } else {
-        setCurrentView('home');
+        setCurrentView('landing');
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Redirect if logged in and on login page
+  useEffect(() => {
+    if (token && currentView === 'login') {
+      setCurrentView('home');
+    }
+  }, [token, currentView]);
 
   // Sync state changes to URL (PushState)
   useEffect(() => {
@@ -218,7 +226,18 @@ const AppContent = () => {
     targetStudents: []
   });
 
+  if (currentView === 'landing') {
+    return <LandingPage
+      isLoggedIn={!!token}
+      onLoginClick={() => setCurrentView('login')}
+      onDashboardClick={() => setCurrentView('home')}
+    />;
+  }
+
   if (!token) {
+    // If we are here, we are not logged in.
+    // If view is NOT login (e.g. they tried to access home), redirect to login (or landing)
+    // But for now, let's just show Login if not landing.
     return <Login />;
   }
 
