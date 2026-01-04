@@ -28,6 +28,7 @@ async def get_announcements(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    print(f"DEBUG: Current user role: {current_user.role}")
     return db.query(Announcement).all()
 
 @router.delete("/{announcement_id}")
