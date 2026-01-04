@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface AuthContextType {
     token: string | null;
-    role: 'teacher' | 'student' | null;
+    role: 'teacher' | 'student' | 'superadmin' | null;
     username: string | null;
     studentNumber: string | null;
     classCode: string | null;
@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-    const [role, setRole] = useState<'teacher' | 'student' | null>(localStorage.getItem('role') as any);
+    const [role, setRole] = useState<'teacher' | 'student' | 'superadmin' | null>(localStorage.getItem('role') as any);
     const [username, setUsername] = useState<string | null>(localStorage.getItem('username'));
     const [studentNumber, setStudentNumber] = useState<string | null>(localStorage.getItem('studentNumber'));
     const [classCode, setClassCode] = useState<string | null>(localStorage.getItem('classCode'));
