@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .schemas import SubmissionRequest, GradingResult
 from .services import grade_submission
 from .database import engine, Base
+from sqlalchemy import text
 from . import models
 from .routers import admin, auth, users, assignments, submissions, announcements, leaderboard
 import os
@@ -40,6 +41,29 @@ try:
             else:
                  conn.execute(text("ALTER TABLE organizations ADD COLUMN is_active BOOLEAN DEFAULT 1"))
             conn.commit()
+
+        # 3. FORCE FIX: Unique Constraints for Tenant Isolation
+        print("Migrating: Fixing User Unique Constraints...")
+        try:
+             # 1. Drop old unique index on student_number (SQLite/Postgres common name)
+             conn.execute(text("DROP INDEX IF EXISTS ix_users_student_number"))
+             # 2. Drop constraint safely (Postgres)
+             try:
+                 conn.execute(text("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_student_number_key"))
+             except Exception:
+                 pass
+             
+             # 3. Create new composite unique index
+             # Note: SQLite supports 'CREATE UNIQUE INDEX IF NOT EXISTS'
+             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_org_student ON users (organization_id, student_number)"))
+             
+             # 4. Superadmin Isolation
+             conn.execute(text("UPDATE users SET organization_id = NULL WHERE role = 'superadmin'"))
+             
+             conn.commit()
+             print("SUCCESS: User Unique Constraints Fixed.")
+        except Exception as e:
+             print(f"Constraint Fix Warning: {e}")
 
 except Exception as e:
     print(f"Migration check warning: {e}")
