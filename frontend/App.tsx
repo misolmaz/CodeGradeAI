@@ -53,7 +53,36 @@ const AppContent = () => {
   const { token, role, username, studentNumber, classCode, avatarUrl, userId, logout, updateAvatar, updateName } = useAuth();
 
 
-  const [currentView, setCurrentView] = useState('home');
+  // Initialize view from URL or default to 'home'
+  const [currentView, setCurrentView] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('view') || 'home';
+  });
+
+  // Handle Browser Back Button (PopState)
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+      if (view) {
+        setCurrentView(view);
+      } else {
+        setCurrentView('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Sync state changes to URL (PushState)
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('view') !== currentView) {
+      url.searchParams.set('view', currentView);
+      window.history.pushState({}, '', url);
+    }
+  }, [currentView]);
 
   // Initialize state
   const [assignments, setAssignments] = useState<Assignment[]>([]);
