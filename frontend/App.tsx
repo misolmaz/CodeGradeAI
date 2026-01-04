@@ -8,6 +8,7 @@ import { Login } from './components/Login';
 import { TeacherDashboard } from './components/TeacherDashboard';
 import { Leaderboard } from './components/Leaderboard';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
+import { SuperAdminHome } from './components/SuperAdminHome';
 
 import {
   Plus, Calendar, Clock, CheckCircle2, AlertCircle, FileCode,
@@ -376,6 +377,10 @@ const AppContent = () => {
   // --- Views ---
 
   const renderHomeView = () => {
+    if (user.role === UserRole.SUPERADMIN) {
+      return <SuperAdminHome setCurrentView={setCurrentView} />;
+    }
+
     const studentSubs = submissions.filter(s => s.studentId === user.id);
 
     const averageScore = studentSubs.length > 0

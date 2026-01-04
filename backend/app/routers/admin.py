@@ -1,5 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from typing import List, Optional
 from ..database import get_db
 from ..services import process_excel_upload
 from ..schemas import TenantCreate
@@ -157,17 +159,20 @@ async def get_system_stats(
     total_tenants = db.query(Organization).count()
     active_tenants = db.query(Organization).filter(Organization.is_active == True).count()
     total_students = db.query(User).filter(User.role == "student").count()
-    total_assignments = db.query(User).filter(User.role == "teacher").count() # Placeholder for assignments count if needed, or query Assignment model
+    
+    # Calculate last 24h stats
+    yesterday = datetime.utcnow() - timedelta(days=1)
+    new_tenants_24h = db.query(Organization).filter(Organization.created_at >= yesterday).count()
 
-    # Actually let's count assignments from the Assignment model via relationship or direct query if imported
-    # For now, let's just count teachers as a proxy for activity
     total_teachers = db.query(User).filter(User.role == "teacher").count()
 
     return {
         "total_tenants": total_tenants,
         "active_tenants": active_tenants,
         "total_students": total_students,
-        "total_teachers": total_teachers
+        "total_teachers": total_teachers,
+        "new_tenants_24h": new_tenants_24h,
+        "system_health": "Operational"
     }
 
 @router.get("/tenants")
