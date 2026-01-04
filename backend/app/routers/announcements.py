@@ -14,7 +14,7 @@ async def create_announcement(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "teacher":
+    if current_user.role not in ["teacher", "superadmin"]:
         raise HTTPException(status_code=403, detail="Sadece öğretmenler duyuru yapabilir")
     
     db_announcement = Announcement(**announcement.dict())
@@ -36,7 +36,7 @@ async def delete_announcement(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "teacher":
+    if current_user.role not in ["teacher", "superadmin"]:
         raise HTTPException(status_code=403, detail="Yetkiniz yok")
     
     db_announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()

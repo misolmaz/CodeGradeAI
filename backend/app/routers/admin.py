@@ -18,7 +18,7 @@ async def upload_students(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "teacher":
+    if current_user.role not in ["teacher", "superadmin"]:
         raise HTTPException(status_code=403, detail="Yetkisiz işlem")
 
     if not file.filename.endswith(('.xls', '.xlsx')):
@@ -37,7 +37,7 @@ async def get_students(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "teacher":
+    if current_user.role not in ["teacher", "superadmin"]:
         raise HTTPException(status_code=403, detail="Yetkisiz işlem")
         
     students = db.query(User).filter(User.role == "student", User.organization_id == current_user.organization_id).all()
@@ -49,7 +49,7 @@ async def reset_student_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "teacher":
+    if current_user.role not in ["teacher", "superadmin"]:
         raise HTTPException(status_code=403, detail="Yetkisiz işlem")
     
     student = db.query(User).filter(User.student_number == student_number, User.role == "student", User.organization_id == current_user.organization_id).first()

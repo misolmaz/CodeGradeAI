@@ -62,11 +62,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const updateAvatar = (newUrl: string) => {
         localStorage.setItem('avatarUrl', newUrl);
         setAvatarUrl(newUrl);
+        // Ensure we don't lose the role
+        const currentRole = localStorage.getItem('role');
+        if (currentRole) setRole(currentRole as any);
     };
 
     const updateName = (newName: string) => {
         localStorage.setItem('username', newName);
         setUsername(newName);
+        // Ensure we don't lose the role
+        const currentRole = localStorage.getItem('role');
+        if (currentRole) setRole(currentRole as any);
     };
 
 
