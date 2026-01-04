@@ -194,7 +194,7 @@ const AppContent = () => {
   const user = {
     id: userId || 'unknown',
     name: username || 'User',
-    role: role === 'teacher' ? UserRole.TEACHER : UserRole.STUDENT,
+    role: role === 'superadmin' ? UserRole.SUPERADMIN : (role === 'teacher' ? UserRole.TEACHER : UserRole.STUDENT),
     avatar: avatarUrl || ("https://api.dicebear.com/7.x/avataaars/svg?seed=" + (studentNumber || 'unknown'))
   };
 

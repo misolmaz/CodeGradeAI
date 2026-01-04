@@ -24,7 +24,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
           <div className="overflow-hidden">
             <h1 className="text-sm font-bold truncate">{user.name}</h1>
             <p className="text-xs text-slate-400 truncate">
-              {user.role === UserRole.TEACHER ? 'Öğretim Üyesi' : 'Öğrenci'}
+              {user.role === UserRole.SUPERADMIN ? 'Sistem Yöneticisi' : (user.role === UserRole.TEACHER ? 'Öğretim Üyesi' : 'Öğrenci')}
             </p>
           </div>
         </div>
