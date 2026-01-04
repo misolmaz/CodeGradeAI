@@ -61,7 +61,7 @@ class Submission(Base):
     submitted_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="submissions")
-    assignment = relationship("Assignment", back_populates="assignment")
+    assignment = relationship("Assignment", back_populates="submissions")
 
 class Announcement(Base):
     __tablename__ = "announcements"
