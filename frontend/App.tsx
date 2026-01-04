@@ -130,7 +130,7 @@ const AppContent = () => {
 
   useEffect(() => {
     const fetchStudents = async () => {
-      if (role === 'teacher' && token) {
+      if ((role === 'teacher' || role === 'superadmin') && token) {
         try {
           const res = await fetch(`${API_BASE_URL}/admin/students`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -498,7 +498,7 @@ const AppContent = () => {
   };
 
   const renderAssignmentsView = () => {
-    const isTeacher = user.role === UserRole.TEACHER;
+    const isTeacher = user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN;
     const filteredAssignments = isTeacher
       ? assignments
       : assignments.filter(a => {

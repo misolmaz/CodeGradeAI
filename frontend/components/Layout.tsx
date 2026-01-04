@@ -45,7 +45,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
           >
             <BookOpen size={20} />
             <span className="text-sm font-medium">
-              {user.role === UserRole.TEACHER ? 'Ödev Yönetimi' : 'Ödevlerim'}
+              {(user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) ? 'Ödev Yönetimi' : 'Ödevlerim'}
             </span>
           </button>
           <button
@@ -56,7 +56,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
             <Trophy size={20} />
             <span className="text-sm font-medium">Liderlik Tablosu</span>
           </button>
-          {user.role === UserRole.TEACHER && (
+          {(user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && (
             <>
               <button
                 onClick={() => { setCurrentView('students'); setIsMobileMenuOpen(false); }}
@@ -83,6 +83,17 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
                 <span className="text-sm font-medium">Yönetim Paneli</span>
               </button>
             </>
+          )}
+
+          {user.role === UserRole.SUPERADMIN && (
+            <button
+              onClick={() => { setCurrentView('superadmin_dashboard'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'superadmin_dashboard' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+                }`}
+            >
+              <LayoutIcon size={20} className="text-purple-400" />
+              <span className="text-sm font-medium text-purple-400">Sistem Paneli</span>
+            </button>
           )}
           <button
             onClick={() => { setCurrentView('profile'); setIsMobileMenuOpen(false); }}
