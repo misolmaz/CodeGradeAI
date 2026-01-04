@@ -1437,7 +1437,7 @@ const AppContent = () => {
             </div>
           </div>
           <div className="px-4 py-1.5 bg-dark-700 rounded-lg text-slate-400 text-[10px] font-black tracking-widest uppercase">
-            {role === 'teacher' ? '📜 ÖĞRETMEN YETKİSİ' : '🎓 ÖĞRENCİ HESABI'}
+            {role === 'teacher' ? '📜 ÖĞRETMEN YETKİSİ' : (role === 'superadmin' ? '⚡ SİSTEM YÖNETİCİSİ' : '🎓 ÖĞRENCİ HESABI')}
           </div>
         </div>
       </div>
@@ -1555,12 +1555,12 @@ const AppContent = () => {
   return (
     <Layout user={user} onLogout={logout} currentView={currentView} setCurrentView={setCurrentView}>
       {currentView === 'home' && renderHomeView()}
-      {currentView === 'teacher_dashboard' && user.role === UserRole.TEACHER && <TeacherDashboard />}
+      {currentView === 'teacher_dashboard' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && <TeacherDashboard />}
       {currentView === 'assignments' && renderAssignmentsView()}
-      {currentView === 'assignment_detail' && user.role === UserRole.TEACHER && renderAssignmentDetailView()}
-      {currentView === 'announcement_management' && user.role === UserRole.TEACHER && renderAnnouncementManagementView()}
-      {currentView === 'students' && user.role === UserRole.TEACHER && renderStudentsView()}
-      {currentView === 'student_analysis_detail' && user.role === UserRole.TEACHER && renderStudentAnalysisDetailView()}
+      {currentView === 'assignment_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAssignmentDetailView()}
+      {currentView === 'announcement_management' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAnnouncementManagementView()}
+      {currentView === 'students' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentsView()}
+      {currentView === 'student_analysis_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentAnalysisDetailView()}
       {currentView === 'profile' && renderProfileView()}
       {currentView === 'leaderboard' && <Leaderboard />}
       {selectedSubmission && renderSubmissionDetailModal()}
