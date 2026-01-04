@@ -134,3 +134,91 @@ async def update_tenant_status(
     
     status_str = "Aktif" if is_active else "Pasif"
     return {"message": f"Organizasyon '{org.name}' başarıyla {status_str} durumuna getirildi."}
+
+@router.get("/stats")
+async def get_system_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns high-level system statistics for SuperAdmin Dashboard.
+    """
+    if current_user.role != "superadmin":
+         raise HTTPException(status_code=403, detail="Yetkiniz yok.")
+    
+    total_tenants = db.query(Organization).count()
+    active_tenants = db.query(Organization).filter(Organization.is_active == True).count()
+    total_students = db.query(User).filter(User.role == "student").count()
+    total_assignments = db.query(User).filter(User.role == "teacher").count() # Placeholder for assignments count if needed, or query Assignment model
+
+    # Actually let's count assignments from the Assignment model via relationship or direct query if imported
+    # For now, let's just count teachers as a proxy for activity
+    total_teachers = db.query(User).filter(User.role == "teacher").count()
+
+    return {
+        "total_tenants": total_tenants,
+        "active_tenants": active_tenants,
+        "total_students": total_students,
+        "total_teachers": total_teachers
+    }
+
+@router.get("/tenants")
+async def get_all_tenants(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    List all tenants with their primary teacher info and status.
+    """
+    if current_user.role != "superadmin":
+         raise HTTPException(status_code=403, detail="Yetkiniz yok.")
+    
+    # Inner join to get the teacher (admin) of the org
+    # Assuming one teacher per org for now as per 'teacher_username' in creation, 
+    # but there could be multiple. We'll fetch the first teacher found for the org as the 'owner'.
+    
+    orgs = db.query(Organization).all()
+    results = []
+    
+    for org in orgs:
+        # Find the 'owner' teacher (first teacher created usually, or check role='teacher' and org_id)
+        owner = db.query(User).filter(User.organization_id == org.id, User.role == "teacher").first()
+        student_count = db.query(User).filter(User.organization_id == org.id, User.role == "student").count()
+        
+        results.append({
+            "id": org.id,
+            "name": org.name,
+            "is_active": org.is_active,
+            "created_at": org.created_at,
+            "owner_name": owner.full_name if owner else "Bilinmiyor",
+            "owner_email": owner.student_number if owner else "-",
+            "student_count": student_count
+        })
+    
+    return results
+
+@router.delete("/tenant/{org_id}")
+async def delete_tenant(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Hard delete a tenant and all its users. Dangerous action.
+    """
+    if current_user.role != "superadmin":
+         raise HTTPException(status_code=403, detail="Yetkiniz yok.")
+    
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organizasyon bulunamadı")
+    
+    # Cascade delete should handle users if configured, but let's be safe and delete users first manually if needed 
+    # or rely on ON DELETE CASCADE.
+    # For this simplified app, we might need to manually delete users to ensure clean slate if cascade isn't set in DB
+    
+    db.query(User).filter(User.organization_id == org_id).delete()
+    db.delete(org)
+    db.commit()
+    
+    return {"message": f"Tenant '{org.name}' ve bağlı tüm kullanıcılar silindi."}

@@ -87,8 +87,8 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
 
           {user.role === UserRole.SUPERADMIN && (
             <button
-              onClick={() => { setCurrentView('superadmin_dashboard'); setIsMobileMenuOpen(false); }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'superadmin_dashboard' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+              onClick={() => { setCurrentView('system_panel'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'system_panel' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
                 }`}
             >
               <LayoutIcon size={20} className="text-purple-400" />

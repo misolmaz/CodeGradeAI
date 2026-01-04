@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Login } from './components/Login';
 import { TeacherDashboard } from './components/TeacherDashboard';
 import { Leaderboard } from './components/Leaderboard';
+import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 
 import {
   Plus, Calendar, Clock, CheckCircle2, AlertCircle, FileCode,
@@ -1561,6 +1562,7 @@ const AppContent = () => {
       {currentView === 'announcement_management' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAnnouncementManagementView()}
       {currentView === 'students' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentsView()}
       {currentView === 'student_analysis_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentAnalysisDetailView()}
+      {currentView === 'system_panel' && user.role === UserRole.SUPERADMIN && <SuperAdminDashboard />}
       {currentView === 'profile' && renderProfileView()}
       {currentView === 'leaderboard' && <Leaderboard />}
       {selectedSubmission && renderSubmissionDetailModal()}

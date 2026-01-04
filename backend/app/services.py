@@ -10,45 +10,54 @@ from .models import User
 from .auth import get_password_hash
 
 load_dotenv()
+import io
 # ... (Gemini Init remains) ...
 
 def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = None):
     try:
-        # Read Excel file from bytes
-        df = pd.read_excel(file_contents)
+        # Read Excel file from bytes stream to avoid FutureWarning
+        df = pd.read_excel(io.BytesIO(file_contents))
         
         # Expected columns: OgrenciNo, Ad, Soyad, Sinif
         # Normalize column names just in case
         df.columns = [c.strip() for c in df.columns]
         
-        results = {"added": 0, "skipped": 0, "errors": []}
+        results = {"added": 0, "skipped": 0, "updated": 0, "errors": []}
         
         for index, row in df.iterrows():
             try:
                 student_no = str(row['OgrenciNo']).strip()
-                # Check if user exists
-                existing_user = db.query(User).filter(User.student_number == student_no).first()
-                if existing_user:
-                    results["skipped"] += 1
-                    continue
-                
                 full_name = f"{row.get('Ad', '')} {row.get('Soyad', '')}".strip()
                 class_code = str(row.get('Sinif', ''))
                 
-                # Default password is the student number
-                hashed_pwd = get_password_hash(student_no)
+                # Check if user exists
+                existing_user = db.query(User).filter(User.student_number == student_no).first()
                 
-                new_user = User(
-                    student_number=student_no,
-                    full_name=full_name,
-                    password_hash=hashed_pwd,
-                    role="student",
-                    class_code=class_code,
-                    is_first_login=True,
-                    organization_id=admin_user.organization_id if admin_user else None
-                )
-                db.add(new_user)
-                results["added"] += 1
+                if existing_user:
+                    # Update existing user info (except password/role)
+                    existing_user.full_name = full_name
+                    existing_user.class_code = class_code
+                    # Assign to current organization if not assigned (upsert logic for tenant)
+                    if admin_user and not existing_user.organization_id:
+                         existing_user.organization_id = admin_user.organization_id
+                    
+                    results["updated"] += 1
+                else:
+                    # Create new user
+                    # Default password is the student number
+                    hashed_pwd = get_password_hash(student_no)
+                    
+                    new_user = User(
+                        student_number=student_no,
+                        full_name=full_name,
+                        password_hash=hashed_pwd,
+                        role="student",
+                        class_code=class_code,
+                        is_first_login=True,
+                        organization_id=admin_user.organization_id if admin_user else None
+                    )
+                    db.add(new_user)
+                    results["added"] += 1
                 
             except Exception as e:
                 results["errors"].append(f"Row {index}: {str(e)}")
