@@ -189,6 +189,10 @@ async def get_all_tenants(
     results = []
     
     for org in orgs:
+        # Exclude System Org (ID 1) or specific filtering requested by user
+        if org.id == 1:
+            continue
+
         # Find the 'owner' teacher (first teacher created usually, or check role='teacher' and org_id)
         owner = db.query(User).filter(User.organization_id == org.id, User.role == "teacher").first()
         student_count = db.query(User).filter(User.organization_id == org.id, User.role == "student").count()

@@ -38,24 +38,28 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
             <LayoutIcon size={20} />
             <span className="text-sm font-medium">Ana Sayfa</span>
           </button>
-          <button
-            onClick={() => { setCurrentView('assignments'); setIsMobileMenuOpen(false); }}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'assignments' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
-              }`}
-          >
-            <BookOpen size={20} />
-            <span className="text-sm font-medium">
-              {user.role === UserRole.TEACHER ? 'Ödev Yönetimi' : 'Ödevlerim'}
-            </span>
-          </button>
-          <button
-            onClick={() => { setCurrentView('leaderboard'); setIsMobileMenuOpen(false); }}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'leaderboard' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
-              }`}
-          >
-            <Trophy size={20} />
-            <span className="text-sm font-medium">Liderlik Tablosu</span>
-          </button>
+          {user.role !== UserRole.SUPERADMIN && (
+            <button
+              onClick={() => { setCurrentView('assignments'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'assignments' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+                }`}
+            >
+              <BookOpen size={20} />
+              <span className="text-sm font-medium">
+                {user.role === UserRole.TEACHER ? 'Ödev Yönetimi' : 'Ödevlerim'}
+              </span>
+            </button>
+          )}
+          {user.role !== UserRole.SUPERADMIN && (
+            <button
+              onClick={() => { setCurrentView('leaderboard'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'leaderboard' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+                }`}
+            >
+              <Trophy size={20} />
+              <span className="text-sm font-medium">Liderlik Tablosu</span>
+            </button>
+          )}
           {user.role === UserRole.TEACHER && (
             <>
               <button
