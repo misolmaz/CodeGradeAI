@@ -30,10 +30,32 @@ async def get_assignments(
     current_user: User = Depends(get_current_user)
 ):
     # Teachers see all, students might have filtering logic here or on frontend
-    # For now, let's return all, and let frontend filter for simplicity like before,
-    # or implement filtering here.
     # Filter by Organization
-    return db.query(Assignment).filter(Assignment.organization_id == current_user.organization_id).all()
+    assignments = db.query(Assignment).filter(Assignment.organization_id == current_user.organization_id).all()
+    
+    # Fetch Teacher Name for this Organization
+    teacher = db.query(User).filter(
+        User.organization_id == current_user.organization_id, 
+        User.role == 'teacher'
+    ).first()
+    teacher_name = teacher.full_name if teacher else "Eğitmen"
+
+    # Convert to schema and inject teacher_name
+    results = []
+    for a in assignments:
+        # Pydantic's from_orm (v1) or model_validate (v2) or constructor
+        # Using from_attributes=True in Config allowing direct dict conversion or constructor
+        # easiest is to construct it or use validation.
+        # Let's use simple manual construction or Pydantic copy.
+        # Actually since response_model is List[AssignmentOut], FastAPI handles the conversion usually.
+        # But we need to inject a field that is NOT in the ORM model (teacher_name).
+        
+        # We can create a partial dict from ORM and add our field
+        a_data = AssignmentOut.from_orm(a)
+        a_data.teacher_name = teacher_name
+        results.append(a_data)
+        
+    return results
 
 @router.delete("/{assignment_id}")
 async def delete_assignment(

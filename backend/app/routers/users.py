@@ -37,7 +37,8 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         "student_number": current_user.student_number,
         "role": current_user.role,
         "class_code": current_user.class_code,
-        "avatar_url": current_user.avatar_url
+        "avatar_url": current_user.avatar_url,
+        "email": current_user.email
     }
 
 @router.post("/change-password")
@@ -63,12 +64,15 @@ async def update_profile(
         current_user.avatar_url = data.avatarUrl
     if data.full_name is not None:
         current_user.full_name = data.full_name
+    if data.email is not None:
+        current_user.email = data.email
     
     db.commit()
     return {
         "message": "Profil güncellendi",
         "avatar_url": current_user.avatar_url,
-        "full_name": current_user.full_name
+        "full_name": current_user.full_name,
+        "email": current_user.email
     }
 
 
@@ -95,6 +99,13 @@ async def get_my_organizations(
         if u.organization_id:
             org = db.query(Organization).filter(Organization.id == u.organization_id).first()
             if org:
+                # Fetch Teacher Name
+                teacher = db.query(User).filter(
+                    User.organization_id == org.id, 
+                    User.role == 'teacher'
+                ).first()
+                teacher_name = teacher.full_name if teacher else "Eğitmen"
+
                 # Determine if this is the currently active session
                 is_current = (u.organization_id == current_user.organization_id)
                 
@@ -102,7 +113,8 @@ async def get_my_organizations(
                     "organization_id": org.id,
                     "organization_name": org.name,
                     "role": u.role,
-                    "is_current": is_current
+                    "is_current": is_current,
+                    "teacher_name": teacher_name
                 })
     
     return org_list

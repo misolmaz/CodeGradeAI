@@ -127,7 +127,8 @@ const AppContent = () => {
           status: a.status,
           targetType: a.target_type,
           targetClass: a.target_class,
-          targetStudents: a.target_students ? JSON.parse(a.target_students) : []
+          targetStudents: a.target_students ? JSON.parse(a.target_students) : [],
+          teacherName: a.teacher_name // Map backend field
         })));
       }
 
@@ -600,6 +601,12 @@ const AppContent = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-lg sm:text-xl font-bold text-white group-hover:text-primary transition-colors truncate">{assignment.title}</h3>
+                      {assignment.teacherName && (
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary/50"></span>
+                          <span className="text-slate-400 text-xs font-semibold">Dersi Veren: <span className="text-slate-300">{assignment.teacherName}</span></span>
+                        </div>
+                      )}
                       <p className="text-slate-400 text-xs sm:text-sm mb-3 mt-1 line-clamp-2 max-w-xl">{assignment.description}</p>
                       <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-slate-500 font-medium">
                         <span className="flex items-center gap-1.5 whitespace-nowrap"><Calendar size={14} className="text-slate-400" /> {new Date(assignment.dueDate).toLocaleDateString()}</span>

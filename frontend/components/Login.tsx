@@ -182,8 +182,14 @@ export const Login = () => {
                                 >
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <h4 className="font-bold text-white group-hover:text-primary transition-colors">{org.name}</h4>
-                                            <span className="text-xs text-slate-500 uppercase tracking-wider font-bold">{org.role === 'teacher' ? 'Öğretmen' : 'Öğrenci'}</span>
+                                            <h4 className="font-bold text-white group-hover:text-primary transition-colors">
+                                                {org.name}
+                                            </h4>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <span className="text-xs text-slate-500 font-medium">{org.teacher_name}</span>
+                                                <span className="w-1 h-1 rounded-full bg-slate-700"></span>
+                                                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">{org.role === 'teacher' ? 'Öğretmen' : 'Öğrenci'}</span>
+                                            </div>
                                         </div>
                                         <div className="w-8 h-8 rounded-full bg-dark-800 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
                                             <FileCode size={16} />

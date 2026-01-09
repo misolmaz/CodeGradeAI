@@ -22,6 +22,7 @@ class User(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     student_number = Column(String, index=True) # Username (not unique globally anymore)
     full_name = Column(String)
+    email = Column(String, index=True, nullable=True)
     password_hash = Column(String)
     role = Column(String) # 'student', 'teacher', 'superadmin'
     class_code = Column(String, nullable=True) 

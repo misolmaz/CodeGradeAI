@@ -28,6 +28,7 @@ export interface Assignment {
   targetType: 'all' | 'class' | 'specific';
   targetClass?: string;
   targetStudents?: string[]; // Student numbers
+  teacherName?: string;
 }
 
 export interface UnitTestResult {

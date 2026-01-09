@@ -229,14 +229,18 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-dark-700 transition-colors border border-transparent hover:border-dark-600 group"
               >
                 <Building2 size={18} className="text-primary" />
-                <span className="font-bold text-white text-sm">{organizationName || 'Organizasyon Seç'}</span>
+                <span className="font-bold text-white text-sm">
+                  {organizations.find(o => o.is_current)?.organization_name
+                    ? `${organizations.find(o => o.is_current)?.organization_name} - ${organizations.find(o => o.is_current)?.teacher_name || ''}`
+                    : (organizationName || 'Organizasyon Seç')}
+                </span>
                 <ChevronDown size={14} className={`text-slate-500 transition-transform ${isSwitcherOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isSwitcherOpen && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setIsSwitcherOpen(false)} />
-                  <div className="absolute top-full left-0 mt-2 w-64 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                  <div className="fixed inset-0 z-[90]" onClick={() => setIsSwitcherOpen(false)} />
+                  <div className="absolute top-full left-0 mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                     <div className="p-3 bg-dark-700/30 border-b border-dark-700">
                       <span className="text-xs font-bold text-slate-500 uppercase">Kayıtlı Dersler/Kurumlar</span>
                     </div>
@@ -252,7 +256,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
                             <span className={`text-sm font-bold ${org.is_current ? 'text-primary' : 'text-slate-300 group-hover:text-white'}`}>
                               {org.organization_name}
                             </span>
-                            <span className="text-[10px] text-slate-500 uppercase font-bold">{org.role}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-slate-500 font-medium">{org.teacher_name}</span>
+                            </div>
                           </div>
                           {org.is_current && <Check size={14} className="text-primary" />}
                           {isSwitching && org.organization_id !== user.id /* Just a spinner place holder, complex logic omitted */ ? null : null}

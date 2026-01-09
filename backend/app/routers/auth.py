@@ -17,8 +17,15 @@ async def login_for_access_token(
     organization_id: Optional[int] = Form(None),
     db: Session = Depends(get_db)
 ):
-    # 1. Find all users with this student number
-    users = db.query(User).filter(User.student_number == form_data.username).all()
+    from sqlalchemy import or_
+
+    # 1. Find all users with this student number OR email
+    users = db.query(User).filter(
+        or_(
+            User.student_number == form_data.username,
+            User.email == form_data.username
+        )
+    ).all()
     
     # 2. Filter users by password verification locally to avoid timing attacks (though hash check is slow anyway)
     # We verify password for ALL matches.
@@ -57,11 +64,19 @@ async def login_for_access_token(
             for user in valid_users:
                 org = db.query(Organization).filter(Organization.id == user.organization_id).first()
                 if org:
+                    # Fetch Teacher Name for this org
+                    teacher = db.query(User).filter(
+                        User.organization_id == org.id, 
+                        User.role == 'teacher'
+                    ).first()
+                    teacher_name = teacher.full_name if teacher else "Eğitmen"
+
                     organizations_list.append({
                         "id": org.id,
                         "name": org.name,
                         "role": user.role,
-                        "class_code": user.class_code
+                        "class_code": user.class_code,
+                        "teacher_name": teacher_name
                     })
             
             return JSONResponse(
@@ -103,7 +118,8 @@ async def login_for_access_token(
         "avatar_url": selected_user.avatar_url,
         "user_id": selected_user.id,
         "organization_id": selected_user.organization_id,
-        "organization_name": org_name
+        "organization_name": org_name,
+        "email": selected_user.email
     }
 
 @router.post("/token/switch")

@@ -34,6 +34,7 @@ class PasswordChange(BaseModel):
 class UserUpdate(BaseModel):
     avatarUrl: str | None = None
     full_name: str | None = None
+    email: str | None = None
 
 
 class AssignmentBase(BaseModel):
@@ -53,6 +54,7 @@ class AssignmentCreate(AssignmentBase):
 class AssignmentOut(AssignmentBase):
     id: int
     created_at: datetime | None = None
+    teacher_name: str | None = None
     class Config:
         from_attributes = True
 
