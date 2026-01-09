@@ -1310,10 +1310,202 @@ const AppContent = () => {
   };
 
   const renderProfileView = () => {
+    const handlePasswordChange = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (profilePassData.new !== profilePassData.confirm) {
+        setProfileMsg({ type: 'error', text: 'Yeni şifreler eşleşmiyor!' });
+        return;
+      }
+      setProfileLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/users/change-password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ oldPassword: profilePassData.old, newPassword: profilePassData.new })
+        });
+        if (res.ok) {
+          setProfileMsg({ type: 'success', text: 'Şifreniz başarıyla değiştirildi.' });
+          setProfilePassData({ old: '', new: '', confirm: '' });
+        } else {
+          const err = await res.json();
+          setProfileMsg({ type: 'error', text: err.detail || 'Hata oluştu!' });
+        }
+      } catch (e) {
+        setProfileMsg({ type: 'error', text: 'Sunucuya ulaşılamadı!' });
+      } finally { setProfileLoading(false); }
+    };
+
+    const handleProfileUpdate = async () => {
+      setProfileLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/users/update-profile`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            avatarUrl: profileNewAvatar,
+            full_name: profileFullName,
+            email: profileEmail
+          })
+        });
+        if (res.ok) {
+          updateAvatar(profileNewAvatar);
+          updateName(profileFullName);
+          setProfileMsg({ type: 'success', text: 'Profil bilgileriniz güncellendi.' });
+        } else {
+          setProfileMsg({ type: 'error', text: 'Hata oluştu!' });
+        }
+      } catch (e) {
+        setProfileMsg({ type: 'error', text: 'Sunucu hatası!' });
+      } finally { setProfileLoading(false); }
+    };
+
     return (
-      <div className="p-8 text-white text-center">
-        <h2 className="text-2xl font-bold">Profil Ayarları</h2>
-        <p className="text-slate-400">Bakım aşamasında...</p>
+      <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <h2 className="text-3xl font-black text-white tracking-tighter flex items-center gap-3">
+          <UserIcon className="text-primary" size={32} /> PROFİL AYARLARI
+        </h2>
+
+        {profileMsg.text && (
+          <div className={`p-4 rounded-xl border ${profileMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'} flex items-center gap-3 font-bold`}>
+            {profileMsg.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+            {profileMsg.text}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="bg-dark-800 p-8 rounded-3xl border border-dark-700 shadow-xl space-y-6 text-center">
+            <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest">Kullanıcı Bilgileri</h3>
+            <div className="relative group mx-auto w-32 h-32">
+              <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-primary/20 shadow-2xl">
+                <img src={profileNewAvatar} alt="Avatar" className="w-full h-full object-cover" />
+              </div>
+              <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer">
+                <Camera className="text-white" size={24} />
+              </div>
+            </div>
+            <div className="space-y-4 text-left">
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1.5 ml-1">Görünen İsim</label>
+                <input
+                  type="text"
+                  placeholder="Ad Soyad"
+                  className="w-full bg-dark-900 border border-dark-700 rounded-xl p-2.5 text-sm text-white outline-none focus:ring-1 focus:ring-primary"
+                  value={profileFullName || ''}
+                  onChange={(e) => setProfileFullName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1.5 ml-1">Avatar URL</label>
+                <input
+                  type="text"
+                  placeholder="Resim URL'si"
+                  className="w-full bg-dark-900 border border-dark-700 rounded-xl p-2.5 text-xs text-white outline-none focus:ring-1 focus:ring-primary"
+                  value={profileNewAvatar || ''}
+                  onChange={(e) => setProfileNewAvatar(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1.5 ml-1">E-Posta Adresi</label>
+                <input
+                  type="email"
+                  placeholder="ornek@edustack.cloud"
+                  className="w-full bg-dark-900 border border-dark-700 rounded-xl p-2.5 text-sm text-white outline-none focus:ring-1 focus:ring-primary"
+                  value={profileEmail || ''}
+                  onChange={(e) => setProfileEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={handleProfileUpdate}
+                  disabled={profileLoading}
+                  className="w-full py-3 bg-primary text-white hover:bg-primary/90 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+                >
+                  <Save size={16} /> BİLGİLERİ KAYDET
+                </button>
+                <button
+                  onClick={() => setProfileNewAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + Math.random())}
+                  className="w-full text-[10px] text-slate-500 hover:text-white underline transition-colors"
+                  disabled={profileLoading}
+                >
+                  Rastgele Avatar Oluştur
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="md:col-span-2 bg-dark-800 p-8 rounded-3xl border border-dark-700 shadow-xl">
+            <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+              <KeyRound size={18} className="text-primary" /> ŞİFRE DEĞİŞTİR
+            </h3>
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Mevcut Şifre</label>
+                <div className="relative">
+                  <LockIcon className="absolute left-3 top-3 text-slate-600" size={18} />
+                  <input
+                    type="password"
+                    required
+                    className="w-full bg-dark-900 border border-dark-700 rounded-xl py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-primary outline-none transition-all"
+                    value={profilePassData.old}
+                    onChange={(e) => setProfilePassData({ ...profilePassData, old: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Yeni Şifre</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    className="w-full bg-dark-900 border border-dark-700 rounded-xl py-2.5 px-4 text-white focus:ring-2 focus:ring-primary outline-none transition-all"
+                    value={profilePassData.new}
+                    onChange={(e) => setProfilePassData({ ...profilePassData, new: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Şifre Tekrar</label>
+                  <input
+                    type="password"
+                    required
+                    className="w-full bg-dark-900 border border-dark-700 rounded-xl py-2.5 px-4 text-white focus:ring-2 focus:ring-primary outline-none transition-all"
+                    value={profilePassData.confirm}
+                    onChange={(e) => setProfilePassData({ ...profilePassData, confirm: e.target.value })}
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={profileLoading}
+                className="w-full mt-4 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-lg shadow-primary/20 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {profileLoading ? 'GÜNCELLENİYOR...' : 'ŞİFREYİ KAYDET'}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div className="bg-dark-800/50 p-6 rounded-2xl border border-dark-700 border-dashed flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-dark-700 rounded-xl flex items-center justify-center text-slate-400">
+              <Activity size={24} />
+            </div>
+            <div>
+              <h4 className="text-white font-bold">{username}</h4>
+              <p className="text-slate-500 text-xs">Okul No: {studentNumber} | Sınıf: {classCode || 'Tanımsız'}</p>
+            </div>
+          </div>
+          <div className="px-4 py-1.5 bg-dark-700 rounded-lg text-slate-400 text-[10px] font-black tracking-widest uppercase">
+            {role === 'teacher' ? '📜 ÖĞRETMEN YETKİSİ' : (role === 'superadmin' ? '⚡ SİSTEM YÖNETİCİSİ' : '🎓 ÖĞRENCİ HESABI')}
+          </div>
+        </div>
       </div>
     );
   };

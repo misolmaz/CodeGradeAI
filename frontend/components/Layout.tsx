@@ -224,53 +224,61 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
       <main className="flex-1 h-full overflow-hidden flex flex-col bg-dark-900 relative">
         <header className="h-16 border-b border-dark-700 bg-dark-800/50 backdrop-blur hidden md:flex items-center justify-between px-8">
           <div className="flex items-center gap-4">
-            {/* Organization Switcher */}
-            <div className="relative">
-              <button
-                onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-dark-700 transition-colors border border-transparent hover:border-dark-600 group"
-              >
+            {/* Organization Switcher - Smart Visibility */}
+            {(organizations.length > 1 || user.role === UserRole.SUPERADMIN) ? (
+              <div className="relative">
+                <button
+                  onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-dark-700 transition-colors border border-transparent hover:border-dark-600 group"
+                >
+                  <Building2 size={18} className="text-primary" />
+                  <span className="font-bold text-white text-sm">
+                    {organizations.find(o => o.is_current)?.organization_name
+                      ? `${organizations.find(o => o.is_current)?.organization_name} - ${organizations.find(o => o.is_current)?.teacher_name || ''}`
+                      : (organizationName || 'Organizasyon Seç')}
+                  </span>
+                  <ChevronDown size={14} className={`text-slate-500 transition-transform ${isSwitcherOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isSwitcherOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[90]" onClick={() => setIsSwitcherOpen(false)} />
+                    <div className="absolute top-full left-0 mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                      <div className="p-3 bg-dark-700/30 border-b border-dark-700">
+                        <span className="text-xs font-bold text-slate-500 uppercase">Kayıtlı Dersler/Kurumlar</span>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto p-1">
+                        {organizations.map(org => (
+                          <button
+                            key={org.organization_id}
+                            onClick={() => handleSwitch(org.organization_id)}
+                            disabled={isSwitching}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between group transition-colors ${org.is_current ? 'bg-primary/10' : 'hover:bg-dark-700'}`}
+                          >
+                            <div className="flex flex-col">
+                              <span className={`text-sm font-bold ${org.is_current ? 'text-primary' : 'text-slate-300 group-hover:text-white'}`}>
+                                {org.organization_name}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-slate-500 font-medium">{org.teacher_name}</span>
+                              </div>
+                            </div>
+                            {org.is_current && <Check size={14} className="text-primary" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 opacity-80 cursor-default">
                 <Building2 size={18} className="text-primary" />
                 <span className="font-bold text-white text-sm">
-                  {organizations.find(o => o.is_current)?.organization_name
-                    ? `${organizations.find(o => o.is_current)?.organization_name} - ${organizations.find(o => o.is_current)?.teacher_name || ''}`
-                    : (organizationName || 'Organizasyon Seç')}
+                  {organizationName || 'CodeGrade AI'}
                 </span>
-                <ChevronDown size={14} className={`text-slate-500 transition-transform ${isSwitcherOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isSwitcherOpen && (
-                <>
-                  <div className="fixed inset-0 z-[90]" onClick={() => setIsSwitcherOpen(false)} />
-                  <div className="absolute top-full left-0 mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                    <div className="p-3 bg-dark-700/30 border-b border-dark-700">
-                      <span className="text-xs font-bold text-slate-500 uppercase">Kayıtlı Dersler/Kurumlar</span>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto p-1">
-                      {organizations.map(org => (
-                        <button
-                          key={org.organization_id}
-                          onClick={() => handleSwitch(org.organization_id)}
-                          disabled={isSwitching}
-                          className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between group transition-colors ${org.is_current ? 'bg-primary/10' : 'hover:bg-dark-700'}`}
-                        >
-                          <div className="flex flex-col">
-                            <span className={`text-sm font-bold ${org.is_current ? 'text-primary' : 'text-slate-300 group-hover:text-white'}`}>
-                              {org.organization_name}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-slate-500 font-medium">{org.teacher_name}</span>
-                            </div>
-                          </div>
-                          {org.is_current && <Check size={14} className="text-primary" />}
-                          {isSwitching && org.organization_id !== user.id /* Just a spinner place holder, complex logic omitted */ ? null : null}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="h-6 w-px bg-dark-700 mx-2"></div>
 
