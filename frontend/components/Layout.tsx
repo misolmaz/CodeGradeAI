@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { API_BASE_URL } from '../config';
 import { User, UserRole } from '../types';
-import { LogOut, BookOpen, BarChart2, Layout as LayoutIcon, Bell, Upload, User as UserIcon, Menu, X, Trophy } from 'lucide-react';
+import { LogOut, BookOpen, BarChart2, Layout as LayoutIcon, Bell, Upload, User as UserIcon, Menu, X, Trophy, ChevronDown, Building2, Check, RotateCw } from 'lucide-react';
 
 
 interface LayoutProps {
@@ -13,6 +15,55 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, setCurrentView, children }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { organizationName, token, login } = useAuth();
+  const [organizations, setOrganizations] = useState<any[]>([]);
+  const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  React.useEffect(() => {
+    if (token) {
+      fetch(`${API_BASE_URL}/users/me/organizations`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(res => res.json())
+        .then(data => setOrganizations(data))
+        .catch(err => console.error("Failed to fetch orgs", err));
+    }
+  }, [token]);
+
+  const handleSwitch = async (orgId: number) => {
+    if (isSwitching) return;
+    setIsSwitching(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/token/switch?organization_id=${orgId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        login(
+          data.access_token,
+          data.role,
+          data.username,
+          data.student_number,
+          data.class_code,
+          data.avatar_url,
+          data.user_id.toString(),
+          data.organization_name
+        );
+        setIsSwitcherOpen(false);
+        window.location.reload(); // Ensure fresh state
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSwitching(false);
+    }
+  };
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
@@ -170,9 +221,56 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
       {/* Main Content */}
       <main className="flex-1 h-full overflow-hidden flex flex-col bg-dark-900 relative">
         <header className="h-16 border-b border-dark-700 bg-dark-800/50 backdrop-blur hidden md:flex items-center justify-between px-8">
-          <h2 className="text-lg font-semibold text-white uppercase tracking-widest text-xs opacity-50">
-            {currentView.replace('_', ' ')}
-          </h2>
+          <div className="flex items-center gap-4">
+            {/* Organization Switcher */}
+            <div className="relative">
+              <button
+                onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-dark-700 transition-colors border border-transparent hover:border-dark-600 group"
+              >
+                <Building2 size={18} className="text-primary" />
+                <span className="font-bold text-white text-sm">{organizationName || 'Organizasyon Seç'}</span>
+                <ChevronDown size={14} className={`text-slate-500 transition-transform ${isSwitcherOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isSwitcherOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsSwitcherOpen(false)} />
+                  <div className="absolute top-full left-0 mt-2 w-64 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-3 bg-dark-700/30 border-b border-dark-700">
+                      <span className="text-xs font-bold text-slate-500 uppercase">Kayıtlı Dersler/Kurumlar</span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-1">
+                      {organizations.map(org => (
+                        <button
+                          key={org.organization_id}
+                          onClick={() => handleSwitch(org.organization_id)}
+                          disabled={isSwitching}
+                          className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between group transition-colors ${org.is_current ? 'bg-primary/10' : 'hover:bg-dark-700'}`}
+                        >
+                          <div className="flex flex-col">
+                            <span className={`text-sm font-bold ${org.is_current ? 'text-primary' : 'text-slate-300 group-hover:text-white'}`}>
+                              {org.organization_name}
+                            </span>
+                            <span className="text-[10px] text-slate-500 uppercase font-bold">{org.role}</span>
+                          </div>
+                          {org.is_current && <Check size={14} className="text-primary" />}
+                          {isSwitching && org.organization_id !== user.id /* Just a spinner place holder, complex logic omitted */ ? null : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="h-6 w-px bg-dark-700 mx-2"></div>
+
+            <h2 className="text-lg font-semibold text-white uppercase tracking-widest text-xs opacity-50">
+              {currentView.replace('_', ' ')}
+            </h2>
+          </div>
+
           <div className="flex items-center gap-4">
             <button className="p-2 text-slate-400 hover:text-white rounded-full hover:bg-dark-700">
               <Bell size={20} />

@@ -71,3 +71,38 @@ async def update_profile(
         "full_name": current_user.full_name
     }
 
+
+@router.get("/me/organizations")
+async def get_my_organizations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns all organizations where the current user (identified by student_number) has an account.
+    This enables the 'Tenant Switcher' feature.
+    """
+    # Find all user records with the same student number
+    # Security: We assume if you are logged in as student X, you can see all orgs for student X.
+    # Ideally we should verify passwords but we are already authenticated.
+    
+    # Import Organization here to avoid circular imports if any, or ensure it's imported at top
+    from ..models import Organization
+    
+    user_records = db.query(User).filter(User.student_number == current_user.student_number).all()
+    
+    org_list = []
+    for u in user_records:
+        if u.organization_id:
+            org = db.query(Organization).filter(Organization.id == u.organization_id).first()
+            if org:
+                # Determine if this is the currently active session
+                is_current = (u.organization_id == current_user.organization_id)
+                
+                org_list.append({
+                    "organization_id": org.id,
+                    "organization_name": org.name,
+                    "role": u.role,
+                    "is_current": is_current
+                })
+    
+    return org_list

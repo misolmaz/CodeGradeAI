@@ -12,6 +12,48 @@ export const Login = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    // Ambiguity States
+    const [showOrgModal, setShowOrgModal] = useState(false);
+    const [orgCandidates, setOrgCandidates] = useState<any[]>([]);
+
+    const handleOrgSelect = async (orgId: number) => {
+        setIsLoading(true);
+        try {
+            const formData = new URLSearchParams();
+            formData.append('username', username);
+            formData.append('password', password);
+            formData.append('organization_id', orgId.toString());
+
+            const response = await fetch(`${API_BASE_URL}/token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.detail || 'Giriş başarısız.');
+            }
+
+            const data = await response.json();
+            login(
+                data.access_token,
+                data.role,
+                data.username,
+                data.student_number,
+                data.class_code,
+                data.avatar_url,
+                data.user_id.toString(),
+                data.organization_name
+            );
+        } catch (err: any) {
+            setError(err.message);
+            setShowOrgModal(false);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -36,7 +78,28 @@ export const Login = () => {
             }
 
             const data = await response.json();
-            login(data.access_token, data.role, data.username, data.student_number, data.class_code, data.avatar_url, data.user_id.toString());
+
+            // Handle Ambiguity (Multiple Organizations)
+            if (response.status === 409) {
+                setOrgCandidates(data.organizations);
+                setShowOrgModal(true);
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Giriş başarısız. Kullanıcı adı veya şifre hatalı.');
+            }
+
+            login(
+                data.access_token,
+                data.role,
+                data.username,
+                data.student_number,
+                data.class_code,
+                data.avatar_url,
+                data.user_id.toString(),
+                data.organization_name // New argument
+            );
 
 
 
@@ -108,6 +171,45 @@ export const Login = () => {
                     Varsayılan şifreniz öğrenci numaranızdır.
                 </p>
             </div>
+
+            {/* Organization Selection Modal */}
+            {showOrgModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-dark-800 w-full max-w-md rounded-2xl border border-dark-700 shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+                        <div className="p-6 border-b border-dark-700 bg-dark-700/50">
+                            <h3 className="text-xl font-bold text-white mb-1">Sınıf Seçimi</h3>
+                            <p className="text-slate-400 text-sm">Devam etmek için giriş yapmak istediğiniz dersi seçin.</p>
+                        </div>
+                        <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+                            {orgCandidates.map((org) => (
+                                <button
+                                    key={org.id}
+                                    onClick={() => handleOrgSelect(org.id)}
+                                    className="w-full text-left p-4 rounded-xl bg-dark-900 border border-dark-700 hover:border-primary/50 hover:bg-primary/5 group transition-all"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h4 className="font-bold text-white group-hover:text-primary transition-colors">{org.name}</h4>
+                                            <span className="text-xs text-slate-500 uppercase tracking-wider font-bold">{org.role === 'teacher' ? 'Öğretmen' : 'Öğrenci'}</span>
+                                        </div>
+                                        <div className="w-8 h-8 rounded-full bg-dark-800 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                                            <FileCode size={16} />
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="p-4 border-t border-dark-700 bg-dark-700/30">
+                            <button
+                                onClick={() => setShowOrgModal(false)}
+                                className="w-full py-3 text-slate-400 hover:text-white font-medium transition-colors"
+                            >
+                                İptal Et
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
