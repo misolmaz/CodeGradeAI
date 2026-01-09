@@ -20,12 +20,25 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("user_id")
         student_number: str = payload.get("sub")
-        if student_number is None:
+        
+        if user_id is None and student_number is None:
             raise credentials_exception
+            
     except JWTError:
         raise credentials_exception
-    user = db.query(User).filter(User.student_number == student_number).first()
+        
+    if user_id:
+        # Preferred: Exact user lookup by Primary Key (handles multi-tenancy correctly)
+        user = db.query(User).filter(User.id == user_id).first()
+    elif student_number:
+        # Fallback: Lookup by student_number (Might be ambiguous in multi-tenant setup)
+        # Should ideally filter by org_id too if present in legacy token
+        user = db.query(User).filter(User.student_number == student_number).first()
+    else:
+        user = None
+
     if user is None:
         raise credentials_exception
     return user

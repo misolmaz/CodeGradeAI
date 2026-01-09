@@ -322,6 +322,7 @@ export const SuperAdminDashboard = () => {
                                 <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">E-Posta Adresi</label>
                                 <input
                                     type="email"
+                                    autoComplete="off"
                                     className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-2 focus:ring-primary transition-all"
                                     placeholder="ornek@edustack.cloud"
                                     value={newTenant.email}
@@ -333,6 +334,7 @@ export const SuperAdminDashboard = () => {
                                     <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Kullanıcı Adı (Giriş)</label>
                                     <input
                                         type="text"
+                                        autoComplete="new-password"
                                         className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-2 focus:ring-primary transition-all"
                                         placeholder="ahmet.yilmaz"
                                         value={newTenant.username}
@@ -343,6 +345,7 @@ export const SuperAdminDashboard = () => {
                                     <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Şifre</label>
                                     <input
                                         type="password"
+                                        autoComplete="new-password"
                                         className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-2 focus:ring-primary transition-all"
                                         placeholder="******"
                                         value={newTenant.password}

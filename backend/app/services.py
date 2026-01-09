@@ -34,32 +34,53 @@ def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = N
                 raw_email = row.get('Email', row.get('E-posta', row.get('Eposta', '')))
                 email = str(raw_email).strip() if raw_email and str(raw_email).lower() != 'nan' else None
                 
-                # If no email provided, use safe default based on student number to handle uniqueness if needed later
-                # Or just keep it None if nullable. User requested auto-fill "no@edustack.local".
-                # I will interpret this as "{student_no}@edustack.local" to be safe and meaningful.
+                # Default email to student_no@edustack.local if missing, to ensure uniqueness and constraints
                 if not email:
                     email = f"{student_no}@edustack.local"
 
                 # Check if user exists within the uploader's organization
-                # This enforces strict tenant isolation for students
                 org_id = admin_user.organization_id if admin_user else None
                 
-                existing_user = db.query(User).filter(
+                # 1. Lookup by Student Number (Primary logic)
+                target_user = db.query(User).filter(
                     User.student_number == student_no,
                     User.organization_id == org_id
                 ).first()
                 
-                if existing_user:
-                    # Update existing user info (except password/role)
-                    existing_user.full_name = full_name
-                    existing_user.class_code = class_code
-                    existing_user.email = email
-                    # Org ID consistency is already guaranteed by the query
+                # 2. Lookup by Email (Secondary logic, if email provided)
+                if not target_user and email:
+                     target_user = db.query(User).filter(
+                        User.email == email,
+                        User.organization_id == org_id
+                    ).first()
+
+                if target_user:
+                    # UPDATE or SKIP
+                    changes = False
                     
-                    results["updated"] += 1
+                    if target_user.full_name != full_name:
+                        target_user.full_name = full_name
+                        changes = True
+                        
+                    if target_user.class_code != class_code:
+                        target_user.class_code = class_code
+                        changes = True
+                        
+                    if email and target_user.email != email:
+                         target_user.email = email
+                         changes = True
+                    
+                    # Ensure student number matches (if we found by email)
+                    if target_user.student_number != student_no:
+                        target_user.student_number = student_no
+                        changes = True
+
+                    if changes:
+                        results["updated"] += 1
+                    else:
+                        results["skipped"] += 1
                 else:
-                    # Create new user
-                    # Default password is the student number
+                    # INSERT new user
                     hashed_pwd = get_password_hash(student_no)
                     
                     new_user = User(
@@ -70,7 +91,7 @@ def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = N
                         role="student",
                         class_code=class_code,
                         is_first_login=True,
-                        organization_id=admin_user.organization_id if admin_user else None
+                        organization_id=org_id
                     )
                     db.add(new_user)
                     results["added"] += 1

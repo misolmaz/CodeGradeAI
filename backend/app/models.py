@@ -16,13 +16,16 @@ class Organization(Base):
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint('student_number', 'organization_id', name='_student_org_uc'),)
+    __table_args__ = (
+        UniqueConstraint('student_number', 'organization_id', name='_student_org_uc'),
+        UniqueConstraint('email', 'organization_id', name='_email_org_uc'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
-    student_number = Column(String, index=True) # Username (not unique globally anymore)
+    student_number = Column(String, index=True) # Username
     full_name = Column(String)
-    email = Column(String, index=True, nullable=True)
+    email = Column(String, index=True, nullable=True) # Removed unique=True, handled by constraint above
     password_hash = Column(String)
     role = Column(String) # 'student', 'teacher', 'superadmin'
     class_code = Column(String, nullable=True) 
