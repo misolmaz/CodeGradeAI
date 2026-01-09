@@ -65,17 +65,12 @@ export const Login = () => {
             formData.append('password', password);
 
             const response = await fetch(`${API_BASE_URL}/token`, {
-
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: formData,
             });
-
-            if (!response.ok) {
-                throw new Error('Giriş başarısız. Kullanıcı adı veya şifre hatalı.');
-            }
 
             const data = await response.json();
 
@@ -98,10 +93,8 @@ export const Login = () => {
                 data.class_code,
                 data.avatar_url,
                 data.user_id.toString(),
-                data.organization_name // New argument
+                data.organization_name
             );
-
-
 
         } catch (err: any) {
             setError(err.message);
