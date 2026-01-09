@@ -53,7 +53,8 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
           data.class_code,
           data.avatar_url,
           data.user_id.toString(),
-          data.organization_name
+          data.organization_name,
+          data.email
         );
         setIsSwitcherOpen(false);
         window.location.reload(); // Ensure fresh state

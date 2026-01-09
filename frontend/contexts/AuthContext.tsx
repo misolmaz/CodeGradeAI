@@ -9,7 +9,8 @@ interface AuthContextType {
     avatarUrl: string | null;
     userId: string | null;
     organizationName: string | null;
-    login: (token: string, role: string, username: string, studentNumber: string, classCode: string, avatarUrl: string | null, userId: string, organizationName: string) => void;
+    email: string | null;
+    login: (token: string, role: string, username: string, studentNumber: string, classCode: string, avatarUrl: string | null, userId: string, organizationName: string, email?: string) => void;
     logout: () => void;
 
     updateAvatar: (newUrl: string) => void;
@@ -28,8 +29,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [avatarUrl, setAvatarUrl] = useState<string | null>(localStorage.getItem('avatarUrl'));
     const [userId, setUserId] = useState<string | null>(localStorage.getItem('userId'));
     const [organizationName, setOrganizationName] = useState<string | null>(localStorage.getItem('organizationName'));
+    const [email, setEmail] = useState<string | null>(localStorage.getItem('email'));
 
-    const login = (newToken: string, newRole: string, newUsername: string, newStudentNumber: string, newClassCode: string, newAvatarUrl: string | null, newUserId: string, newOrganizationName: string) => {
+    const login = (newToken: string, newRole: string, newUsername: string, newStudentNumber: string, newClassCode: string, newAvatarUrl: string | null, newUserId: string, newOrganizationName: string, newEmail?: string) => {
         localStorage.setItem('token', newToken);
         localStorage.setItem('role', newRole);
         localStorage.setItem('username', newUsername);
@@ -40,6 +42,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (newAvatarUrl) localStorage.setItem('avatarUrl', newAvatarUrl);
         else localStorage.removeItem('avatarUrl');
 
+        if (newEmail) localStorage.setItem('email', newEmail);
+        else localStorage.removeItem('email');
+
         setToken(newToken);
         setRole(newRole as any);
         setUsername(newUsername);
@@ -48,6 +53,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setAvatarUrl(newAvatarUrl);
         setUserId(newUserId);
         setOrganizationName(newOrganizationName);
+        setEmail(newEmail || null);
     };
 
 
@@ -61,6 +67,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setAvatarUrl(null);
         setUserId(null);
         setOrganizationName(null);
+        setEmail(null);
     };
 
 
@@ -82,7 +89,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 
     return (
-        <AuthContext.Provider value={{ token, role, username, studentNumber, classCode, avatarUrl, userId, organizationName, login, logout, updateAvatar, updateName }}>
+        <AuthContext.Provider value={{ token, role, username, studentNumber, classCode, avatarUrl, userId, organizationName, email, login, logout, updateAvatar, updateName }}>
             {children}
         </AuthContext.Provider>
     );

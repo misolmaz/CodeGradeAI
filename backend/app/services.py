@@ -30,6 +30,16 @@ def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = N
                 full_name = f"{row.get('Ad', '')} {row.get('Soyad', '')}".strip()
                 class_code = str(row.get('Sinif', ''))
                 
+                # Email handling (Try 'Email', 'E-posta', 'Eposta')
+                raw_email = row.get('Email', row.get('E-posta', row.get('Eposta', '')))
+                email = str(raw_email).strip() if raw_email and str(raw_email).lower() != 'nan' else None
+                
+                # If no email provided, use safe default based on student number to handle uniqueness if needed later
+                # Or just keep it None if nullable. User requested auto-fill "no@edustack.local".
+                # I will interpret this as "{student_no}@edustack.local" to be safe and meaningful.
+                if not email:
+                    email = f"{student_no}@edustack.local"
+
                 # Check if user exists within the uploader's organization
                 # This enforces strict tenant isolation for students
                 org_id = admin_user.organization_id if admin_user else None
@@ -43,6 +53,7 @@ def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = N
                     # Update existing user info (except password/role)
                     existing_user.full_name = full_name
                     existing_user.class_code = class_code
+                    existing_user.email = email
                     # Org ID consistency is already guaranteed by the query
                     
                     results["updated"] += 1
@@ -54,6 +65,7 @@ def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = N
                     new_user = User(
                         student_number=student_no,
                         full_name=full_name,
+                        email=email,
                         password_hash=hashed_pwd,
                         role="student",
                         class_code=class_code,

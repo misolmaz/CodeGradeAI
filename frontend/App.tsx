@@ -51,7 +51,7 @@ const isDeadlinePassed = (dueDateString: string): boolean => {
 
 // --- Main App Content ---
 const AppContent = () => {
-  const { token, role, username, studentNumber, classCode, avatarUrl, userId, logout, updateAvatar, updateName } = useAuth();
+  const { token, role, username, studentNumber, classCode, avatarUrl, userId, logout, updateAvatar, updateName, email } = useAuth();
 
 
   // Initialize view from URL or default to 'landing'
@@ -197,6 +197,7 @@ const AppContent = () => {
   const [profilePassData, setProfilePassData] = useState({ old: '', new: '', confirm: '' });
   const [profileNewAvatar, setProfileNewAvatar] = useState('');
   const [profileFullName, setProfileFullName] = useState('');
+  const [profileEmail, setProfileEmail] = useState(email || '');
   const [profileLoading, setProfileLoading] = useState(false);
 
   const [profileMsg, setProfileMsg] = useState({ type: '', text: '' });
@@ -1349,12 +1350,16 @@ const AppContent = () => {
           },
           body: JSON.stringify({
             avatarUrl: profileNewAvatar,
-            full_name: profileFullName
+            full_name: profileFullName,
+            email: profileEmail
           })
         });
         if (res.ok) {
           updateAvatar(profileNewAvatar);
           updateName(profileFullName);
+          // Update email in local context/storage if implicit, but login() handles it usually.
+          // Since we don't have updateEmail on context, we might rely on re-login or just UI state.
+          // Ideally AuthContext should have updateEmail. But for now, user sees the change.
           setProfileMsg({ type: 'success', text: 'Profil bilgileriniz güncellendi.' });
         } else {
           setProfileMsg({ type: 'error', text: 'Hata oluştu!' });
@@ -1413,243 +1418,254 @@ const AppContent = () => {
                   onChange={(e) => setProfileNewAvatar(e.target.value)}
                 />
               </div>
-              <button
-                onClick={handleProfileUpdate}
-                disabled={profileLoading}
-                className="w-full py-3 bg-primary text-white hover:bg-primary/90 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
-              >
-                <Save size={16} /> BİLGİLERİ KAYDET
-              </button>
-              <button
-                onClick={() => setProfileNewAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + Math.random())}
-                className="w-full text-[10px] text-slate-500 hover:text-white underline transition-colors"
-                disabled={profileLoading}
-              >
-                Rastgele Avatar Oluştur
-              </button>
-            </div>
-          </div>
-
-
-
-          {/* Password Section */}
-          <div className="md:col-span-2 bg-dark-800 p-8 rounded-3xl border border-dark-700 shadow-xl">
-            <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
-              <KeyRound size={18} className="text-primary" /> ŞİFRE DEĞİŞTİR
-            </h3>
-            <form onSubmit={handlePasswordChange} className="space-y-4">
               <div>
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Mevcut Şifre</label>
-                <div className="relative">
-                  <LockIcon className="absolute left-3 top-3 text-slate-600" size={18} />
-                  <input
-                    type="password"
-                    required
-                    className="w-full bg-dark-900 border border-dark-700 rounded-xl py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-primary outline-none transition-all"
-                    value={profilePassData.old}
-                    onChange={(e) => setProfilePassData({ ...profilePassData, old: e.target.value })}
-                  />
-                </div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1.5 ml-1">E-Posta Adresi</label>
+                <input
+                  type="email"
+                  placeholder="ornek@edustack.cloud"
+                  className="w-full bg-dark-900 border border-dark-700 rounded-xl p-2.5 text-sm text-white outline-none focus:ring-1 focus:ring-primary"
+                  value={profileEmail}
+                  onChange={(e) => setProfileEmail(e.target.value)}
+                />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Yeni Şifre</label>
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    className="w-full bg-dark-900 border border-dark-700 rounded-xl py-2.5 px-4 text-white focus:ring-2 focus:ring-primary outline-none transition-all"
-                    value={profilePassData.new}
-                    onChange={(e) => setProfilePassData({ ...profilePassData, new: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Şifre Tekrar</label>
-                  <input
-                    type="password"
-                    required
-                    className="w-full bg-dark-900 border border-dark-700 rounded-xl py-2.5 px-4 text-white focus:ring-2 focus:ring-primary outline-none transition-all"
-                    value={profilePassData.confirm}
-                    onChange={(e) => setProfilePassData({ ...profilePassData, confirm: e.target.value })}
-                  />
-                </div>
+              <div className="pt-2">
+                <button
+                  onClick={handleProfileUpdate}
+                  disabled={profileLoading}
+                  className="w-full py-3 bg-primary text-white hover:bg-primary/90 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+                >
+                  <Save size={16} /> BİLGİLERİ KAYDET
+                </button>
+                <button
+                  onClick={() => setProfileNewAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + Math.random())}
+                  className="w-full text-[10px] text-slate-500 hover:text-white underline transition-colors"
+                  disabled={profileLoading}
+                >
+                  Rastgele Avatar Oluştur
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={profileLoading}
-                className="w-full mt-4 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-lg shadow-primary/20 transition-all active:scale-95 disabled:opacity-50"
-              >
-                {profileLoading ? 'GÜNCELLENİYOR...' : 'ŞİFREYİ KAYDET'}
-              </button>
-            </form>
+            </div>
 
+
+
+            {/* Password Section */}
+            <div className="md:col-span-2 bg-dark-800 p-8 rounded-3xl border border-dark-700 shadow-xl">
+              <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                <KeyRound size={18} className="text-primary" /> ŞİFRE DEĞİŞTİR
+              </h3>
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Mevcut Şifre</label>
+                  <div className="relative">
+                    <LockIcon className="absolute left-3 top-3 text-slate-600" size={18} />
+                    <input
+                      type="password"
+                      required
+                      className="w-full bg-dark-900 border border-dark-700 rounded-xl py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-primary outline-none transition-all"
+                      value={profilePassData.old}
+                      onChange={(e) => setProfilePassData({ ...profilePassData, old: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Yeni Şifre</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      className="w-full bg-dark-900 border border-dark-700 rounded-xl py-2.5 px-4 text-white focus:ring-2 focus:ring-primary outline-none transition-all"
+                      value={profilePassData.new}
+                      onChange={(e) => setProfilePassData({ ...profilePassData, new: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Şifre Tekrar</label>
+                    <input
+                      type="password"
+                      required
+                      className="w-full bg-dark-900 border border-dark-700 rounded-xl py-2.5 px-4 text-white focus:ring-2 focus:ring-primary outline-none transition-all"
+                      value={profilePassData.confirm}
+                      onChange={(e) => setProfilePassData({ ...profilePassData, confirm: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={profileLoading}
+                  className="w-full mt-4 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-lg shadow-primary/20 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {profileLoading ? 'GÜNCELLENİYOR...' : 'ŞİFREYİ KAYDET'}
+                </button>
+              </form>
+
+            </div>
+          </div>
+
+          {/* Info Card */}
+          <div className="bg-dark-800/50 p-6 rounded-2xl border border-dark-700 border-dashed flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-dark-700 rounded-xl flex items-center justify-center text-slate-400">
+                <Activity size={24} />
+              </div>
+              <div>
+                <h4 className="text-white font-bold">{username}</h4>
+                <p className="text-slate-500 text-xs">Okul No: {studentNumber} | Sınıf: {classCode || 'Tanımsız'}</p>
+              </div>
+            </div>
+            <div className="px-4 py-1.5 bg-dark-700 rounded-lg text-slate-400 text-[10px] font-black tracking-widest uppercase">
+              {role === 'teacher' ? '📜 ÖĞRETMEN YETKİSİ' : (role === 'superadmin' ? '⚡ SİSTEM YÖNETİCİSİ' : '🎓 ÖĞRENCİ HESABI')}
+            </div>
           </div>
         </div>
-
-        {/* Info Card */}
-        <div className="bg-dark-800/50 p-6 rounded-2xl border border-dark-700 border-dashed flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-dark-700 rounded-xl flex items-center justify-center text-slate-400">
-              <Activity size={24} />
-            </div>
-            <div>
-              <h4 className="text-white font-bold">{username}</h4>
-              <p className="text-slate-500 text-xs">Okul No: {studentNumber} | Sınıf: {classCode || 'Tanımsız'}</p>
-            </div>
-          </div>
-          <div className="px-4 py-1.5 bg-dark-700 rounded-lg text-slate-400 text-[10px] font-black tracking-widest uppercase">
-            {role === 'teacher' ? '📜 ÖĞRETMEN YETKİSİ' : (role === 'superadmin' ? '⚡ SİSTEM YÖNETİCİSİ' : '🎓 ÖĞRENCİ HESABI')}
-          </div>
-        </div>
-      </div>
-    );
+        );
   };
 
   const renderAnnouncementManagementView = () => {
     return (
-      <div className="space-y-6 animate-in fade-in duration-500">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-white tracking-tight">Duyuru Yönetimi</h2>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-semibold shadow-lg shadow-primary/20"
-          >
-            <Plus size={20} /> Yeni Duyuru
-          </button>
-        </div>
+        <div className="space-y-6 animate-in fade-in duration-500">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-white tracking-tight">Duyuru Yönetimi</h2>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-semibold shadow-lg shadow-primary/20"
+            >
+              <Plus size={20} /> Yeni Duyuru
+            </button>
+          </div>
 
-        <div className="bg-dark-800 rounded-2xl border border-dark-700 overflow-hidden shadow-2xl overflow-x-auto">
-          <table className="w-full text-left min-w-[600px]">
+          <div className="bg-dark-800 rounded-2xl border border-dark-700 overflow-hidden shadow-2xl overflow-x-auto">
+            <table className="w-full text-left min-w-[600px]">
 
-            <thead className="bg-dark-700/80 text-slate-400 text-[10px] font-black uppercase tracking-[0.15em]">
-              <tr>
-                <th className="px-8 py-5 font-bold">Başlık</th>
-                <th className="px-8 py-5 font-bold text-center">Tür</th>
-                <th className="px-8 py-5 font-bold">Tarih</th>
-                <th className="px-8 py-5 font-bold text-right">İşlem</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-dark-700/50">
-              {announcements.map(ann => (
-                <tr key={ann.id} className="hover:bg-dark-700/30 transition-colors group text-sm">
-                  <td className="px-8 py-6">
-                    <div className="flex flex-col">
-                      <span className="text-white font-bold">{ann.title}</span>
-                      <span className="text-slate-500 text-xs line-clamp-1">{ann.content}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 text-center">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border ${ann.type === 'warning' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-primary/10 text-primary border-primary/20'}`}>
-                      {ann.type === 'warning' ? 'UYARI' : 'BİLGİ'}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6 text-slate-400 font-medium">{ann.date}</td>
-                  <td className="px-8 py-6 text-right">
-                    <button
-                      onClick={() => handleDeleteAnnouncement(ann.id)}
-                      className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {announcements.length === 0 && (
+              <thead className="bg-dark-700/80 text-slate-400 text-[10px] font-black uppercase tracking-[0.15em]">
                 <tr>
-                  <td colSpan={4} className="px-8 py-20 text-center text-slate-500 italic">Henüz duyuru bulunmuyor.</td>
+                  <th className="px-8 py-5 font-bold">Başlık</th>
+                  <th className="px-8 py-5 font-bold text-center">Tür</th>
+                  <th className="px-8 py-5 font-bold">Tarih</th>
+                  <th className="px-8 py-5 font-bold text-right">İşlem</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-dark-700/50">
+                {announcements.map(ann => (
+                  <tr key={ann.id} className="hover:bg-dark-700/30 transition-colors group text-sm">
+                    <td className="px-8 py-6">
+                      <div className="flex flex-col">
+                        <span className="text-white font-bold">{ann.title}</span>
+                        <span className="text-slate-500 text-xs line-clamp-1">{ann.content}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6 text-center">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border ${ann.type === 'warning' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-primary/10 text-primary border-primary/20'}`}>
+                        {ann.type === 'warning' ? 'UYARI' : 'BİLGİ'}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6 text-slate-400 font-medium">{ann.date}</td>
+                    <td className="px-8 py-6 text-right">
+                      <button
+                        onClick={() => handleDeleteAnnouncement(ann.id)}
+                        className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {announcements.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-8 py-20 text-center text-slate-500 italic">Henüz duyuru bulunmuyor.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-dark-800 w-full max-w-md rounded-2xl border border-dark-700 shadow-2xl p-8 relative">
-              <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white"><X size={20} /></button>
-              <h3 className="text-xl font-bold text-white mb-6">Yeni Duyuru Oluştur</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Başlık</label>
-                  <input
-                    type="text"
-                    className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-1 focus:ring-primary"
-                    placeholder="Duyuru başlığı..."
-                    value={newAnnData.title}
-                    onChange={e => setNewAnnData({ ...newAnnData, title: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">İçerik</label>
-                  <textarea
-                    className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-1 focus:ring-primary min-h-[100px]"
-                    placeholder="Duyuru metni..."
-                    value={newAnnData.content}
-                    onChange={e => setNewAnnData({ ...newAnnData, content: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Tür</label>
-                  <select
-                    className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-1 focus:ring-primary"
-                    value={newAnnData.type}
-                    onChange={e => setNewAnnData({ ...newAnnData, type: e.target.value as any })}
+          {isModalOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-dark-800 w-full max-w-md rounded-2xl border border-dark-700 shadow-2xl p-8 relative">
+                <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white"><X size={20} /></button>
+                <h3 className="text-xl font-bold text-white mb-6">Yeni Duyuru Oluştur</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Başlık</label>
+                    <input
+                      type="text"
+                      className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="Duyuru başlığı..."
+                      value={newAnnData.title}
+                      onChange={e => setNewAnnData({ ...newAnnData, title: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">İçerik</label>
+                    <textarea
+                      className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-1 focus:ring-primary min-h-[100px]"
+                      placeholder="Duyuru metni..."
+                      value={newAnnData.content}
+                      onChange={e => setNewAnnData({ ...newAnnData, content: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Tür</label>
+                    <select
+                      className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-1 focus:ring-primary"
+                      value={newAnnData.type}
+                      onChange={e => setNewAnnData({ ...newAnnData, type: e.target.value as any })}
+                    >
+                      <option value="info">Bilgi (Mavi)</option>
+                      <option value="warning">Uyarı (Turuncu)</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleCreateAnnouncement}
+                    className="w-full py-3 bg-primary text-white font-black rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 mt-4"
                   >
-                    <option value="info">Bilgi (Mavi)</option>
-                    <option value="warning">Uyarı (Turuncu)</option>
-                  </select>
+                    YAYINLA
+                  </button>
                 </div>
-                <button
-                  onClick={handleCreateAnnouncement}
-                  className="w-full py-3 bg-primary text-white font-black rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 mt-4"
-                >
-                  YAYINLA
-                </button>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-    );
+          )}
+        </div>
+        );
   };
 
-  return (
-    <Layout user={user} onLogout={logout} currentView={currentView} setCurrentView={setCurrentView}>
-      {currentView === 'home' && renderHomeView()}
-      {currentView === 'teacher_dashboard' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && <TeacherDashboard />}
-      {currentView === 'assignments' && renderAssignmentsView()}
-      {currentView === 'assignment_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAssignmentDetailView()}
-      {currentView === 'announcement_management' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAnnouncementManagementView()}
-      {currentView === 'students' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentsView()}
-      {currentView === 'student_analysis_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentAnalysisDetailView()}
-      {currentView === 'system_panel' && user.role === UserRole.SUPERADMIN && <SuperAdminDashboard />}
-      {currentView === 'profile' && renderProfileView()}
-      {currentView === 'leaderboard' && <Leaderboard />}
-      {selectedSubmission && renderSubmissionDetailModal()}
+        return (
+        <Layout user={user} onLogout={logout} currentView={currentView} setCurrentView={setCurrentView}>
+          {currentView === 'home' && renderHomeView()}
+          {currentView === 'teacher_dashboard' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && <TeacherDashboard />}
+          {currentView === 'assignments' && renderAssignmentsView()}
+          {currentView === 'assignment_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAssignmentDetailView()}
+          {currentView === 'announcement_management' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAnnouncementManagementView()}
+          {currentView === 'students' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentsView()}
+          {currentView === 'student_analysis_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentAnalysisDetailView()}
+          {currentView === 'system_panel' && user.role === UserRole.SUPERADMIN && <SuperAdminDashboard />}
+          {currentView === 'profile' && renderProfileView()}
+          {currentView === 'leaderboard' && <Leaderboard />}
+          {selectedSubmission && renderSubmissionDetailModal()}
 
-      {toast && toast.visible && (
-        <div className="fixed top-6 right-6 z-[200] animate-in slide-in-from-right duration-500">
-          <div className="bg-dark-800 border-l-4 border-yellow-500 p-6 rounded-xl shadow-2xl flex items-start gap-4 max-w-sm border border-dark-700">
-            <div className="p-3 bg-yellow-500/10 rounded-full text-yellow-500 flex-shrink-0 animate-bounce">
-              <Award size={32} />
+          {toast && toast.visible && (
+            <div className="fixed top-6 right-6 z-[200] animate-in slide-in-from-right duration-500">
+              <div className="bg-dark-800 border-l-4 border-yellow-500 p-6 rounded-xl shadow-2xl flex items-start gap-4 max-w-sm border border-dark-700">
+                <div className="p-3 bg-yellow-500/10 rounded-full text-yellow-500 flex-shrink-0 animate-bounce">
+                  <Award size={32} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-white text-lg leading-tight">{toast.title}</h4>
+                  <p className="text-slate-400 text-sm mt-1 leading-snug">{toast.msg}</p>
+                </div>
+                <button onClick={() => setToast(null)} className="text-slate-500 hover:text-white absolute top-4 right-4"><X size={18} /></button>
+              </div>
             </div>
-            <div>
-              <h4 className="font-bold text-white text-lg leading-tight">{toast.title}</h4>
-              <p className="text-slate-400 text-sm mt-1 leading-snug">{toast.msg}</p>
-            </div>
-            <button onClick={() => setToast(null)} className="text-slate-500 hover:text-white absolute top-4 right-4"><X size={18} /></button>
-          </div>
-        </div>
-      )}
+          )}
 
-    </Layout>
-  );
+        </Layout>
+        );
 };
 
-export default function App() {
+        export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+        );
 }

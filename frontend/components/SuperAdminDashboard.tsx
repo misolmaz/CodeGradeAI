@@ -35,6 +35,7 @@ export const SuperAdminDashboard = () => {
     const [newTenant, setNewTenant] = useState({
         orgName: '',
         teacherName: '',
+        email: '',
         username: '',
         password: ''
     });
@@ -89,7 +90,7 @@ export const SuperAdminDashboard = () => {
     };
 
     const handleCreateTenant = async () => {
-        if (!newTenant.orgName || !newTenant.username || !newTenant.password || !newTenant.teacherName) {
+        if (!newTenant.orgName || !newTenant.username || !newTenant.password || !newTenant.teacherName || !newTenant.email) {
             alert("Lütfen tüm alanları doldurun.");
             return;
         }
@@ -99,7 +100,8 @@ export const SuperAdminDashboard = () => {
                 org_name: newTenant.orgName,
                 teacher_username: newTenant.username,
                 teacher_password: newTenant.password,
-                teacher_fullname: newTenant.teacherName
+                teacher_fullname: newTenant.teacherName,
+                teacher_email: newTenant.email
             };
 
             const res = await fetch(`${API_BASE_URL}/admin/create-tenant`, {
@@ -114,7 +116,8 @@ export const SuperAdminDashboard = () => {
             if (res.ok) {
                 alert("Yeni öğretmen hesabı başarıyla oluşturuldu!");
                 setIsCreateModalOpen(false);
-                setNewTenant({ orgName: '', teacherName: '', username: '', password: '' });
+                setIsCreateModalOpen(false);
+                setNewTenant({ orgName: '', teacherName: '', email: '', username: '', password: '' });
                 fetchData();
             } else {
                 const err = await res.json();
@@ -313,6 +316,16 @@ export const SuperAdminDashboard = () => {
                                     placeholder="Örn: Dr. Ahmet Yılmaz"
                                     value={newTenant.teacherName}
                                     onChange={e => setNewTenant({ ...newTenant, teacherName: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">E-Posta Adresi</label>
+                                <input
+                                    type="email"
+                                    className="w-full bg-dark-900 border border-dark-700 rounded-xl p-3 text-white outline-none focus:ring-2 focus:ring-primary transition-all"
+                                    placeholder="ornek@edustack.cloud"
+                                    value={newTenant.email}
+                                    onChange={e => setNewTenant({ ...newTenant, email: e.target.value })}
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-4">

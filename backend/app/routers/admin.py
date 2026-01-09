@@ -95,6 +95,7 @@ async def create_new_tenant_api(
     db.refresh(new_org)
 
     # 2. Create Teacher
+    # Check username
     existing_user = db.query(User).filter(User.student_number == tenant_data.teacher_username).first()
     if existing_user:
         # Cleanup
@@ -102,10 +103,19 @@ async def create_new_tenant_api(
         db.commit()
         raise HTTPException(status_code=400, detail=f"'{tenant_data.teacher_username}' kullanıcı adı zaten kullanılıyor.")
 
+    # Check email
+    existing_email = db.query(User).filter(User.email == tenant_data.teacher_email).first()
+    if existing_email:
+        # Cleanup
+        db.delete(new_org)
+        db.commit()
+        raise HTTPException(status_code=400, detail=f"'{tenant_data.teacher_email}' e-posta adresi zaten kullanımda.")
+
     hashed_pwd = get_password_hash(tenant_data.teacher_password)
     new_teacher = User(
         student_number=tenant_data.teacher_username,
         full_name=tenant_data.teacher_fullname,
+        email=tenant_data.teacher_email,
         password_hash=hashed_pwd,
         role="teacher",
         class_code="ADMIN",

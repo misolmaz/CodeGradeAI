@@ -44,7 +44,8 @@ export const Login = () => {
                 data.class_code,
                 data.avatar_url,
                 data.user_id.toString(),
-                data.organization_name
+                data.organization_name,
+                data.email
             );
         } catch (err: any) {
             setError(err.message);
@@ -93,7 +94,8 @@ export const Login = () => {
                 data.class_code,
                 data.avatar_url,
                 data.user_id.toString(),
-                data.organization_name
+                data.organization_name,
+                data.email
             );
 
         } catch (err: any) {

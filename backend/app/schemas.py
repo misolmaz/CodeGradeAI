@@ -93,5 +93,6 @@ class SubmissionOut(BaseModel):
 class TenantCreate(BaseModel):
     org_name: str
     teacher_username: str
+    teacher_email: str
     teacher_password: str
     teacher_fullname: str
