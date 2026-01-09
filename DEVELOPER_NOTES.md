@@ -37,3 +37,8 @@ Excel yüklemelerinde "Hata verip durma" YOKTUR. "Akıllı Upsert" (Merge) vard�
 ## 4. Kullanıcı Arayüzü (UI/UX)
 - **Organizasyon Seçici:** Kullanıcının sadece 1 (bir) organizasyonu varsa, header/sidebar'daki "Organizasyon Seç" menüsü **GİZLENMELİDİR**.
 - **Profil:** Kullanıcılar kendi profillerini (Avatar, Şifre) düzenleyebilir. Bu işlem, bağlı oldukları organizasyon bağlamında gerçekleşir.
+
+---
+
+## 5. Başarı Notları (Success Milestones)
+- **Multi-tenant Email Fix:** Multi-tenant email isolation confirmed. Students can now belong to multiple organizations via composite unique keys.

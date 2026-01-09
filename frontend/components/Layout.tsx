@@ -222,7 +222,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
 
       {/* Main Content */}
       <main className="flex-1 h-full overflow-hidden flex flex-col bg-dark-900 relative">
-        <header className="h-16 border-b border-dark-700 bg-dark-800/50 backdrop-blur hidden md:flex items-center justify-between px-8">
+        <header className="h-16 border-b border-dark-700 bg-dark-800/50 backdrop-blur hidden md:flex items-center justify-between px-8 relative z-50">
           <div className="flex items-center gap-4">
             {/* Organization Switcher - Smart Visibility */}
             {(organizations.length > 1 || user.role === UserRole.SUPERADMIN) ? (
@@ -243,7 +243,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
                 {isSwitcherOpen && (
                   <>
                     <div className="fixed inset-0 z-[90]" onClick={() => setIsSwitcherOpen(false)} />
-                    <div className="absolute top-full left-0 mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="absolute top-full left-0 mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-[9999] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                       <div className="p-3 bg-dark-700/30 border-b border-dark-700">
                         <span className="text-xs font-bold text-slate-500 uppercase">Kayıtlı Dersler/Kurumlar</span>
                       </div>
