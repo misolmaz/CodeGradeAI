@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { UserRole, Assignment, Announcement, Submission, GradingResult } from './types';
 import { Layout } from './components/Layout';
 import { gradeSubmission } from './services/geminiService';
+import { parseGradingResult } from './utils/parseGradingResult';
 import { db } from './services/persistence';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Login } from './components/Login';
@@ -144,8 +145,7 @@ const AppContent = () => {
           code: s.code_content,
           submittedAt: s.submitted_at,
           status: 'graded',
-          gradingResult: JSON.parse(s.grading_result)
-
+          gradingResult: parseGradingResult(s.grading_result) ?? undefined
         })));
       }
 
@@ -1041,6 +1041,11 @@ const AppContent = () => {
   const renderSubmissionDetailModal = () => {
     if (!selectedSubmission || !selectedSubmission.gradingResult) return null;
     const { gradingResult } = selectedSubmission;
+    const unitTests = gradingResult.unitTests ?? [];
+    const suggestions = gradingResult.suggestions ?? [];
+    const isTeacherView = role === 'teacher' || role === 'superadmin';
+    const showDirectSolutionWarning =
+      isTeacherView && gradingResult.socraticFeedback?.direct_solution_given === true;
 
     return (
       <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[100] overflow-y-auto animate-in fade-in duration-300">
@@ -1099,7 +1104,7 @@ const AppContent = () => {
                 <section className="animate-in slide-in-from-right-4 duration-500 delay-200">
                   <h3 className="text-lg font-black text-white/50 mb-4 tracking-[0.2em] uppercase text-xs">Birim Testleri (Unit Tests)</h3>
                   <div className="grid gap-3">
-                    {gradingResult.unitTests.map((test, idx) => (
+                    {unitTests.length > 0 ? unitTests.map((test, idx) => (
                       <div key={idx} className="flex items-center justify-between p-5 bg-dark-900/50 rounded-2xl border border-dark-700 group hover:border-primary/20 transition-all">
                         <div className="flex items-center gap-4">
                           <div className={`p-2 rounded-lg ${test.passed ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
@@ -1111,21 +1116,95 @@ const AppContent = () => {
                           {test.message}
                         </span>
                       </div>
-                    ))}
+                    )) : (
+                      <p className="text-slate-500 text-sm italic p-4 bg-dark-900/30 rounded-2xl border border-dark-700">Birim testi sonucu bulunmuyor.</p>
+                    )}
                   </div>
                 </section>
 
                 <section className="animate-in slide-in-from-right-4 duration-500 delay-300">
                   <h3 className="text-lg font-black text-white/50 mb-4 tracking-[0.2em] uppercase text-xs">Gelişim Tavsiyeleri</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {gradingResult.suggestions.map((sug, idx) => (
+                    {suggestions.length > 0 ? suggestions.map((sug, idx) => (
                       <div key={idx} className="flex gap-4 p-5 bg-dark-900/30 rounded-2xl border border-dark-700 group hover:bg-dark-700/20 transition-all">
                         <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-black text-sm shrink-0 border border-primary/20">{idx + 1}</div>
                         <p className="text-slate-300 text-sm leading-relaxed">{sug}</p>
                       </div>
-                    ))}
+                    )) : (
+                      <p className="text-slate-500 text-sm italic p-4 bg-dark-900/30 rounded-2xl border border-dark-700">Gelişim tavsiyesi bulunmuyor.</p>
+                    )}
                   </div>
                 </section>
+
+                {gradingResult.rubricScores && (
+                  <section className="animate-in slide-in-from-right-4 duration-500 delay-350">
+                    <h3 className="text-lg font-black text-white/50 mb-4 tracking-[0.2em] uppercase text-xs">Rubrik Alt Puanları</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {[
+                        { label: 'Doğruluk', value: gradingResult.rubricScores.correctness },
+                        { label: 'Algoritmik Düşünme', value: gradingResult.rubricScores.algorithmic_thinking },
+                        { label: 'Sözdizimi ve Dil', value: gradingResult.rubricScores.syntax_and_language_use },
+                        { label: 'Okunabilirlik', value: gradingResult.rubricScores.code_readability },
+                        { label: 'Hata Ayıklama Farkındalığı', value: gradingResult.rubricScores.debugging_awareness },
+                      ].map((item) => (
+                        <div key={item.label} className="flex items-center justify-between p-4 bg-dark-900/50 rounded-2xl border border-dark-700">
+                          <span className="text-slate-300 text-sm font-medium">{item.label}</span>
+                          <span className="text-primary font-black">{item.value}/5</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {gradingResult.errorFindings && gradingResult.errorFindings.length > 0 && (
+                  <section className="animate-in slide-in-from-right-4 duration-500 delay-400">
+                    <h3 className="text-lg font-black text-white/50 mb-4 tracking-[0.2em] uppercase text-xs">Tespit Edilen Hatalar</h3>
+                    <div className="grid gap-3">
+                      {gradingResult.errorFindings.map((finding, idx) => (
+                        <div key={idx} className="p-5 bg-dark-900/50 rounded-2xl border border-dark-700 space-y-2">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-xs font-black uppercase tracking-widest text-primary">{finding.error_type}</span>
+                            <span className="text-xs font-bold text-slate-500 uppercase">{finding.severity}</span>
+                            {finding.location_hint && (
+                              <span className="text-xs text-slate-500 italic">{finding.location_hint}</span>
+                            )}
+                          </div>
+                          <p className="text-slate-300 text-sm">{finding.explanation}</p>
+                          {finding.misconception && (
+                            <p className="text-slate-500 text-xs italic">Kavram yanılgısı: {finding.misconception}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {gradingResult.socraticFeedback && (
+                  <section className="animate-in slide-in-from-right-4 duration-500 delay-450">
+                    <h3 className="text-lg font-black text-white/50 mb-4 tracking-[0.2em] uppercase text-xs">Sokratik Geri Bildirim</h3>
+                    <div className="grid gap-3">
+                      {[
+                        { label: 'Farkındalık Sorusu', value: gradingResult.socraticFeedback.awareness_question },
+                        { label: 'Yönlendirici Soru', value: gradingResult.socraticFeedback.guiding_question },
+                        { label: 'Kademeli İpucu', value: gradingResult.socraticFeedback.progressive_hint },
+                        { label: 'Sonraki Adım', value: gradingResult.socraticFeedback.next_action },
+                      ].map((item) => (
+                        <div key={item.label} className="p-5 bg-dark-900/30 rounded-2xl border border-dark-700">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">{item.label}</h4>
+                          <p className="text-slate-300 text-sm leading-relaxed">{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {showDirectSolutionWarning && (
+                  <section className="p-5 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+                    <p className="text-amber-300 text-sm font-medium">
+                      Bu değerlendirme çıktısında doğrudan çözüm verme riski tespit edilmiştir. Geri bildirimin pedagojik uygunluğu öğretim elemanı tarafından kontrol edilmelidir.
+                    </p>
+                  </section>
+                )}
 
                 <section className="animate-in slide-in-from-right-4 duration-500 delay-400">
                   <div className="flex justify-between items-center mb-4">

@@ -102,3 +102,45 @@ The backend implements a fault-tolerant "Smart Upsert" mechanism instead of fail
 - **2026-01-09:** Multi-tenant email isolation confirmed. Students can now belong to multiple organizations via composite unique keys (`_email_org_uc`).
 - **2026-01-09:** Unified Login Logic implemented (Email + StudentID support).
 - **2026-01-10:** Z-Index architecture standardized for complex dropdowns.
+
+---
+
+## 7. Faz 0 — Güvenli Hazırlık (v0.2 Geriye Uyumluluk)
+
+**Tarih:** 2026-07-12  
+**Kapsam:** Pydantic şemaları ve frontend tip hazırlığı; veritabanı modeli değiştirilmedi.
+
+### 7.1 Şema Değişiklikleri
+
+`GradingResult` şemasına Faz 1 için planlanan dört alan **opsiyonel** olarak eklendi:
+
+| Alan | Tip | Durum |
+| :--- | :--- | :--- |
+| `rubricScores` | `RubricScores` | Opsiyonel |
+| `errorFindings` | `List[ErrorFinding]` | Opsiyonel |
+| `socraticFeedback` | `SocraticFeedback` | Opsiyonel |
+| `pedagogicalMetadata` | `PedagogicalMetadata` | Opsiyonel |
+
+Mevcut zorunlu MVP alanları (`grade`, `feedback`, `codeQuality`, `suggestions`, `unitTests`) korunmuştur.
+
+**Değiştirilen dosyalar:**
+- `backend/app/schemas.py` — Yeni alt modeller + opsiyonel alanlar
+- `frontend/types.ts` — Paralel TypeScript arayüzleri
+- `frontend/utils/parseGradingResult.ts` — Güvenli JSON parse/fallback yardımcısı (yeni)
+- `frontend/App.tsx` — `parseGradingResult` entegrasyonu, koşullu UI blokları
+
+### 7.2 Geriye Uyumluluk
+
+- Eski `grading_result` JSON kayıtları yeni alanlar içermese de parse edilir ve UI'da gösterilir.
+- Bozuk veya eksik JSON için `parseGradingResult` güvenli varsayılanlar döndürür; uygulama çökmez.
+- `models.py` ve veritabanındaki mevcut `code_content` / `grading_result` verileri **değiştirilmedi**.
+- API uç noktalarının davranışı değiştirilmedi; yeni alanlar yalnızca şema/tip düzeyinde tanımlandı.
+
+### 7.3 Çalıştırılan Testler
+
+| Test | Komut | Sonuç |
+| :--- | :--- | :--- |
+| Frontend build | `npm run build` | ✅ Başarılı (vite build, 24.56s) |
+| Frontend TypeScript | `npx tsc --noEmit` | ⚠️ Mevcut `geminiService.ts` ImportMeta.env hatası (önceden var); yeni dosyalarda hata yok |
+| Backend syntax | `python -m py_compile app/schemas.py` | ✅ Başarılı |
+| Backend startup | `python -c "from app.main import app"` | ⚠️ Yerel ortamda `fastapi`/`pydantic` kurulu değil; şema sözdizimi doğrulandı |

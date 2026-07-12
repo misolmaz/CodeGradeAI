@@ -38,12 +38,49 @@ export interface UnitTestResult {
   message: string;
 }
 
+export interface RubricScores {
+  correctness: number;
+  algorithmic_thinking: number;
+  syntax_and_language_use: number;
+  code_readability: number;
+  debugging_awareness: number;
+}
+
+export interface ErrorFinding {
+  error_type: string;
+  severity: string;
+  location_hint?: string;
+  explanation: string;
+  misconception?: string;
+}
+
+export interface SocraticFeedback {
+  awareness_question: string;
+  guiding_question: string;
+  progressive_hint: string;
+  next_action: string;
+  direct_solution_given: boolean;
+}
+
+export interface PedagogicalMetadata {
+  feedback_strategy: string;
+  scaffolding_level: string;
+  student_level: string;
+  prompt_version: string;
+  rubric_version: string;
+  model_name?: string;
+}
+
 export interface GradingResult {
   grade: number;
   feedback: string;
   codeQuality: string;
   suggestions: string[];
   unitTests: UnitTestResult[];
+  rubricScores?: RubricScores;
+  errorFindings?: ErrorFinding[];
+  socraticFeedback?: SocraticFeedback;
+  pedagogicalMetadata?: PedagogicalMetadata;
 }
 
 export interface Submission {
