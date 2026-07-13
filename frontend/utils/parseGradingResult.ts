@@ -2,10 +2,55 @@ import {
   GradingResult,
   UnitTestResult,
   RubricScores,
+  RubricScoreValue,
   ErrorFinding,
+  ErrorType,
+  ErrorSeverity,
+  ScaffoldingLevel,
   SocraticFeedback,
   PedagogicalMetadata,
 } from '../types';
+
+const VALID_ERROR_TYPES: ReadonlySet<string> = new Set([
+  'syntax_error',
+  'runtime_error',
+  'logic_error',
+  'conceptual_error',
+  'boundary_case_error',
+  'data_type_error',
+  'loop_error',
+  'conditional_error',
+  'function_structure_error',
+  'input_output_format_error',
+  'code_readability_issue',
+  'incomplete_solution',
+  'major_error_not_detected',
+]);
+
+const VALID_ERROR_SEVERITIES: ReadonlySet<string> = new Set(['low', 'medium', 'high', 'blocking']);
+
+const VALID_SCAFFOLDING_LEVELS: ReadonlySet<string> = new Set([
+  'awareness',
+  'guided_hint',
+  'strategic_hint',
+  'near_solution',
+]);
+
+function isRubricScoreValue(value: unknown): value is RubricScoreValue {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 5;
+}
+
+function isErrorType(value: unknown): value is ErrorType {
+  return typeof value === 'string' && VALID_ERROR_TYPES.has(value);
+}
+
+function isErrorSeverity(value: unknown): value is ErrorSeverity {
+  return typeof value === 'string' && VALID_ERROR_SEVERITIES.has(value);
+}
+
+function isScaffoldingLevel(value: unknown): value is ScaffoldingLevel {
+  return typeof value === 'string' && VALID_SCAFFOLDING_LEVELS.has(value);
+}
 
 function normalizeUnitTest(raw: unknown): UnitTestResult {
   const item = raw as Record<string, unknown>;
@@ -31,33 +76,34 @@ function parseRubricScores(raw: unknown): RubricScores | undefined {
     'code_readability',
     'debugging_awareness',
   ] as const;
-  if (!fields.every((key) => typeof scores[key] === 'number')) return undefined;
+  if (!fields.every((key) => isRubricScoreValue(scores[key]))) return undefined;
   return {
-    correctness: scores.correctness as number,
-    algorithmic_thinking: scores.algorithmic_thinking as number,
-    syntax_and_language_use: scores.syntax_and_language_use as number,
-    code_readability: scores.code_readability as number,
-    debugging_awareness: scores.debugging_awareness as number,
+    correctness: scores.correctness as RubricScoreValue,
+    algorithmic_thinking: scores.algorithmic_thinking as RubricScoreValue,
+    syntax_and_language_use: scores.syntax_and_language_use as RubricScoreValue,
+    code_readability: scores.code_readability as RubricScoreValue,
+    debugging_awareness: scores.debugging_awareness as RubricScoreValue,
   };
 }
 
 function parseErrorFindings(raw: unknown): ErrorFinding[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) return undefined;
-  const findings = raw
-    .filter((item) => item && typeof item === 'object')
-    .map((item) => {
-      const finding = item as Record<string, unknown>;
-      return {
-        error_type: typeof finding.error_type === 'string' ? finding.error_type : '',
-        severity: typeof finding.severity === 'string' ? finding.severity : '',
-        location_hint:
-          typeof finding.location_hint === 'string' ? finding.location_hint : undefined,
-        explanation: typeof finding.explanation === 'string' ? finding.explanation : '',
-        misconception:
-          typeof finding.misconception === 'string' ? finding.misconception : undefined,
-      };
-    })
-    .filter((finding) => finding.error_type && finding.explanation);
+  const findings: ErrorFinding[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const finding = item as Record<string, unknown>;
+    if (!isErrorType(finding.error_type) || !isErrorSeverity(finding.severity)) continue;
+    if (typeof finding.explanation !== 'string' || !finding.explanation) continue;
+    findings.push({
+      error_type: finding.error_type,
+      severity: finding.severity,
+      location_hint:
+        typeof finding.location_hint === 'string' ? finding.location_hint : undefined,
+      explanation: finding.explanation,
+      misconception:
+        typeof finding.misconception === 'string' ? finding.misconception : undefined,
+    });
+  }
   return findings.length > 0 ? findings : undefined;
 }
 
@@ -92,9 +138,10 @@ function parsePedagogicalMetadata(raw: unknown): PedagogicalMetadata | undefined
     'rubric_version',
   ] as const;
   if (!required.every((key) => typeof metadata[key] === 'string')) return undefined;
+  if (!isScaffoldingLevel(metadata.scaffolding_level)) return undefined;
   return {
     feedback_strategy: metadata.feedback_strategy as string,
-    scaffolding_level: metadata.scaffolding_level as string,
+    scaffolding_level: metadata.scaffolding_level,
     student_level: metadata.student_level as string,
     prompt_version: metadata.prompt_version as string,
     rubric_version: metadata.rubric_version as string,

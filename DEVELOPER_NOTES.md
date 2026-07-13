@@ -144,3 +144,50 @@ Mevcut zorunlu MVP alanları (`grade`, `feedback`, `codeQuality`, `suggestions`,
 | Frontend TypeScript | `npx tsc --noEmit` | ⚠️ Mevcut `geminiService.ts` ImportMeta.env hatası (önceden var); yeni dosyalarda hata yok |
 | Backend syntax | `python -m py_compile app/schemas.py` | ✅ Başarılı |
 | Backend startup | `python -c "from app.main import app"` | ⚠️ Yerel ortamda `fastapi`/`pydantic` kurulu değil; şema sözdizimi doğrulandı |
+
+---
+
+## 8. Faz 1 — Backend Değerlendirme Şeması ve Hata Taksonomisi
+
+**Tarih:** 2026-07-13  
+**Kapsam:** Pydantic Literal kısıtlamaları ve TypeScript union tipleri; `models.py` ve `services.py` değiştirilmedi.
+
+### 8.1 Uygulanan Kısıtlamalar
+
+| Alan / Model | Kısıtlama | Değerler |
+| :--- | :--- | :--- |
+| `RubricScores` (5 alt puan) | `Field(ge=1, le=5)` | 1–5 (Faz 0'dan devralındı, doğrulandı) |
+| `ErrorFinding.error_type` | `ErrorType` Literal | 13 hata türü + `major_error_not_detected` |
+| `ErrorFinding.severity` | `ErrorSeverity` Literal | `low`, `medium`, `high`, `blocking` |
+| `PedagogicalMetadata.scaffolding_level` | `ScaffoldingLevel` Literal | `awareness`, `guided_hint`, `strategic_hint`, `near_solution` |
+| `SocraticFeedback.direct_solution_given` | `bool` (zorunlu) | Değişiklik yok, doğrulandı |
+
+### 8.2 Hata Taksonomisi (`ErrorType`)
+
+```text
+syntax_error, runtime_error, logic_error, conceptual_error,
+boundary_case_error, data_type_error, loop_error, conditional_error,
+function_structure_error, input_output_format_error, code_readability_issue,
+incomplete_solution, major_error_not_detected
+```
+
+### 8.3 Değiştirilen Dosyalar
+
+- `backend/app/schemas.py` — `ErrorType`, `ErrorSeverity`, `ScaffoldingLevel` Literal tanımları
+- `frontend/types.ts` — Paralel union tipleri (`ErrorType`, `ErrorSeverity`, `ScaffoldingLevel`, `RubricScoreValue`)
+- `frontend/utils/parseGradingResult.ts` — Taksonomi doğrulama filtreleri (eski/geçersiz kayıtlar atlanır)
+
+### 8.4 Geriye Uyumluluk
+
+- Kök `GradingResult` alanlarındaki `Optional` yapı korunmuştur.
+- Katı kurallar yalnızca v0.2 alt alanları gönderildiğinde Pydantic tarafından uygulanır.
+- Eski MVP kayıtları (yalnızca 5 temel alan) etkilenmez.
+- `parseGradingResult` geçersiz taksonomi değerlerini sessizce filtreler; UI çökmez.
+
+### 8.5 Çalıştırılan Testler
+
+| Test | Komut | Sonuç |
+| :--- | :--- | :--- |
+| Frontend build | `npm run build` | ✅ Başarılı (vite build, 25.48s) |
+| Frontend TypeScript | `npx tsc --noEmit` | ⚠️ Önceden var olan `geminiService.ts` ImportMeta.env hatası; yeni dosyalarda hata yok |
+| Backend syntax | `python -m py_compile app/schemas.py` | ✅ Başarılı |

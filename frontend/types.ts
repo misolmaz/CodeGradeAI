@@ -38,17 +38,38 @@ export interface UnitTestResult {
   message: string;
 }
 
+export type RubricScoreValue = 1 | 2 | 3 | 4 | 5;
+
+export type ErrorType =
+  | 'syntax_error'
+  | 'runtime_error'
+  | 'logic_error'
+  | 'conceptual_error'
+  | 'boundary_case_error'
+  | 'data_type_error'
+  | 'loop_error'
+  | 'conditional_error'
+  | 'function_structure_error'
+  | 'input_output_format_error'
+  | 'code_readability_issue'
+  | 'incomplete_solution'
+  | 'major_error_not_detected';
+
+export type ErrorSeverity = 'low' | 'medium' | 'high' | 'blocking';
+
+export type ScaffoldingLevel = 'awareness' | 'guided_hint' | 'strategic_hint' | 'near_solution';
+
 export interface RubricScores {
-  correctness: number;
-  algorithmic_thinking: number;
-  syntax_and_language_use: number;
-  code_readability: number;
-  debugging_awareness: number;
+  correctness: RubricScoreValue;
+  algorithmic_thinking: RubricScoreValue;
+  syntax_and_language_use: RubricScoreValue;
+  code_readability: RubricScoreValue;
+  debugging_awareness: RubricScoreValue;
 }
 
 export interface ErrorFinding {
-  error_type: string;
-  severity: string;
+  error_type: ErrorType;
+  severity: ErrorSeverity;
   location_hint?: string;
   explanation: string;
   misconception?: string;
@@ -64,7 +85,7 @@ export interface SocraticFeedback {
 
 export interface PedagogicalMetadata {
   feedback_strategy: string;
-  scaffolding_level: string;
+  scaffolding_level: ScaffoldingLevel;
   student_level: string;
   prompt_version: string;
   rubric_version: string;

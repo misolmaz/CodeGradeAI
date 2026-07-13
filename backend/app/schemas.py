@@ -2,6 +2,28 @@ from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
 from datetime import datetime
 
+# --- v0.2 Pedagogical Taxonomies (Faz 1) ---
+
+ErrorType = Literal[
+    "syntax_error",
+    "runtime_error",
+    "logic_error",
+    "conceptual_error",
+    "boundary_case_error",
+    "data_type_error",
+    "loop_error",
+    "conditional_error",
+    "function_structure_error",
+    "input_output_format_error",
+    "code_readability_issue",
+    "incomplete_solution",
+    "major_error_not_detected",
+]
+
+ErrorSeverity = Literal["low", "medium", "high", "blocking"]
+
+ScaffoldingLevel = Literal["awareness", "guided_hint", "strategic_hint", "near_solution"]
+
 
 
 class Badge(BaseModel):
@@ -22,8 +44,8 @@ class RubricScores(BaseModel):
     debugging_awareness: int = Field(..., ge=1, le=5, description="Hata ayıklama farkındalığı alt puanı (1-5)")
 
 class ErrorFinding(BaseModel):
-    error_type: str = Field(..., description="Hata taksonomisi türü")
-    severity: str = Field(..., description="Hata şiddeti (low, medium, high, blocking)")
+    error_type: ErrorType = Field(..., description="Hata taksonomisi türü")
+    severity: ErrorSeverity = Field(..., description="Hata şiddeti")
     location_hint: Optional[str] = Field(None, description="Hatanın kod içindeki konum ipucu")
     explanation: str = Field(..., description="Hata açıklaması")
     misconception: Optional[str] = Field(None, description="Olası kavram yanılgısı")
@@ -37,7 +59,7 @@ class SocraticFeedback(BaseModel):
 
 class PedagogicalMetadata(BaseModel):
     feedback_strategy: str = Field(..., description="Geri bildirim stratejisi")
-    scaffolding_level: str = Field(..., description="İskeleleme seviyesi")
+    scaffolding_level: ScaffoldingLevel = Field(..., description="İskeleleme seviyesi")
     student_level: str = Field(..., description="Öğrenci seviyesi")
     prompt_version: str = Field(..., description="Prompt versiyonu")
     rubric_version: str = Field(..., description="Rubrik versiyonu")
