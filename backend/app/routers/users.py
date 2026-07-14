@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
@@ -11,6 +12,7 @@ from ..jwt_auth import SECRET_KEY, ALGORITHM
 router = APIRouter(prefix="/users", tags=["Users"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -42,6 +44,28 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     if user is None:
         raise credentials_exception
     return user
+
+
+async def get_optional_current_user(
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("user_id")
+        student_number: str = payload.get("sub")
+        if user_id is None and student_number is None:
+            return None
+    except JWTError:
+        return None
+
+    if user_id:
+        return db.query(User).filter(User.id == user_id).first()
+    if student_number:
+        return db.query(User).filter(User.student_number == student_number).first()
+    return None
 
 @router.get("/me")
 async def read_users_me(current_user: User = Depends(get_current_user)):

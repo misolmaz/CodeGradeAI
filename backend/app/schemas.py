@@ -81,6 +81,8 @@ class SubmissionRequest(BaseModel):
     assignmentLanguage: str = Field(..., description="Kodlama dili (örn: Python, Java)")
     studentCode: str = Field(..., description="Öğrencinin yazdığı kod")
     studentLevel: Literal["beginner", "intermediate", "advanced"] = Field("beginner", description="Öğrenci seviyesi")
+    assignmentId: Optional[int] = Field(None, description="Ödev ID — kalıcı kayıt için (Faz 3)")
+    researchConsent: Optional[bool] = Field(False, description="YAYIN_016 araştırma onam bayrağı")
 
 class PasswordChange(BaseModel):
     oldPassword: str
