@@ -15,8 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Create Database Tables
-models.Base.metadata.create_all(bind=engine)
+# Schema is managed by Alembic migrations (run: alembic upgrade head)
 from .initial_data import create_initial_data
 create_initial_data()
 

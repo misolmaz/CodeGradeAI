@@ -14,7 +14,17 @@ sys.path.insert(0, str(BACKEND_DIR))
 load_dotenv(BACKEND_DIR / ".env")
 
 from app.database import Base  # noqa: E402
-from app import models  # noqa: F401, E402
+from app.models import (  # noqa: F401, E402
+    Announcement,
+    Assignment,
+    Evaluation,
+    InteractionEvent,
+    Organization,
+    StudySession,
+    Submission,
+    User,
+    UserBadge,
+)
 
 config = context.config
 

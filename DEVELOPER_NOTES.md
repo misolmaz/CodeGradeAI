@@ -9,6 +9,8 @@ This document serves as the primary technical reference for CodeGrade AI. It def
 ### 1.1 Database Engine
 - **Production:** PostgreSQL (`psycopg2`) is the mandatory standard.
 - **Development:** SQLite is permitted for local testing but discouraged for integration tests due to constraint differences.
+- **Schema Management:** Alembic is the single source of truth. Do **not** use `Base.metadata.create_all()` on existing PostgreSQL databases — it cannot alter legacy tables and will fail when new FK columns (e.g. `submissions.submission_id`) are missing.
+- **Startup:** Run `alembic upgrade head` before starting the server. Schema is no longer auto-created in `main.py`.
 
 ### 1.2 Multi-Tenant Isolation
 - **Pattern:** Organization-based isolation (Row-Level logic).
@@ -191,3 +193,116 @@ incomplete_solution, major_error_not_detected
 | Frontend build | `npm run build` | ✅ Başarılı (vite build, 25.48s) |
 | Frontend TypeScript | `npx tsc --noEmit` | ⚠️ Önceden var olan `geminiService.ts` ImportMeta.env hatası; yeni dosyalarda hata yok |
 | Backend syntax | `python -m py_compile app/schemas.py` | ✅ Başarılı |
+
+---
+
+## 9. Faz 2 — Prompt ve AI Çıktı Sözleşmesinin Güncellenmesi
+
+**Tarih:** 2026-07-13  
+**Kapsam:** `backend/app/services.py` — Sokratik/kademeli geri bildirim promptu ve JSON sözleşmesi; `models.py` ve frontend değiştirilmedi.
+
+### 9.1 Merkezi Sabitler
+
+| Sabit | Değer |
+| :--- | :--- |
+| `PROMPT_VERSION` | `cgai_prompt_v0.2` |
+| `RUBRIC_VERSION` | `cgai_rubric_v0.2` |
+| `FEEDBACK_STRATEGY` | `socratic_scaffolding` |
+
+### 9.2 Prompt Stratejisi
+
+`get_system_instruction(student_level)` baştan yazıldı. Yeni prompt:
+
+- **Tam çözüm yasağı:** Doğrudan çalışan kod/cevap anahtarı verilmesi açıkça yasaklandı.
+- **Sokratik akış:** `awareness_question` → `guiding_question` → `progressive_hint` → `next_action` zorunlu.
+- **Hata taksonomisi:** 13 sabit `error_type` + `major_error_not_detected`; `severity` 4 değerle sınırlı.
+- **Rubrik:** 5 kriter, her biri 1–5 arası zorunlu.
+- **Meta veri:** `pedagogicalMetadata` merkezi sabitlerle doldurulur; `_enrich_pedagogical_metadata` son kontrol yapar.
+- **JSON sözleşmesi:** MVP + v0.2 alanlarının tamamı promptta zorunlu kılındı; `response_schema: GradingResult` korundu.
+
+### 9.3 Değiştirilen Dosyalar
+
+- `backend/app/services.py` — Prompt yeniden yazımı, sabitler, metadata zenginleştirme
+- `backend/test_ai.py` — Opsiyonel canlı AI smoke testi (yeni)
+
+### 9.4 Çalıştırılan Testler
+
+| Test | Komut | Sonuç |
+| :--- | :--- | :--- |
+| Backend syntax | `python -m py_compile app/services.py` | ✅ Başarılı |
+| AI smoke test | `python test_ai.py` | ⚠️ Yerel ortamda `pydantic` kurulu değil; betik oluşturuldu |
+
+---
+
+## 10. Faz 3 — PostgreSQL Sokratik Akış Tabloları ve Araştırma Logları
+
+**Tarih:** 2026-07-14  
+**Kapsam:** YAYIN_016 araştırması için oturum merkezli veri modeli, Alembic migrasyonları ve `/api/grade` kalıcılığı. Frontend değiştirilmedi.
+
+**İlişkili doküman:** `docs/Socratic_Flow_State_Model.md`
+
+### 10.1 Yeni Veritabanı Varlıkları
+
+| Model | Tablo | Açıklama |
+| :--- | :--- | :--- |
+| `StudySession` | `study_sessions` | Öğrenci + ödev bağlamında Sokratik çalışma oturumu |
+| `Submission` (genişletildi) | `submissions` | `submission_id` (UUID), `session_id`, `attempt_no`, `code_hash` |
+| `Evaluation` | `evaluations` | Tam `GradingResult` → `grading_result_json` (JSONB) |
+| `InteractionEvent` | `interaction_events` | Append-only olay günlüğü → `metadata_json` (JSONB) |
+
+MVP `submissions.id` (integer PK) korunmuştur. Yeni akış `submission_id` (UUID) üzerinden FK kurar.
+
+### 10.2 Alembic Kurulumu ve Migrasyon Zinciri
+
+```text
+234ff9a58f47  add_socratic_flow_tables      (study_sessions, evaluations, interaction_events, submissions genişletme)
+96899b4211d0  add_socratic_flow_tables      (users composite unique constraint düzeltmesi)
+db8700569b4c  fix_missing_socratic_tables   (şema doğrulama — boş migrasyon)
+```
+
+**Komutlar** (`.venv` aktif, `backend/` klasöründe):
+
+```powershell
+alembic revision --autogenerate -m "açıklama"
+alembic upgrade head
+alembic current
+```
+
+> **Önemli:** `python -m alembic` kullanmayın. `backend/alembic/` migrasyon klasörü kurulu paketi gölgeler. Doğrudan `alembic` veya `.venv\Scripts\alembic.exe` kullanın.
+
+`alembic/env.py` tüm modelleri açıkça import eder (`StudySession`, `Submission`, `Evaluation`, `InteractionEvent` vb.) — autogenerate'in yeni tabloları görmesi için zorunludur.
+
+### 10.3 `/api/grade` Kalıcılık Akışı
+
+`POST /api/grade` artık opsiyonel olarak PostgreSQL'e yazar:
+
+1. **Ön koşul:** `assignmentId` istek gövdesinde + `Authorization: Bearer <token>` header'ı
+2. **AI öncesi:** `StudySession` (yoksa oluştur) + `Submission` + `submission_created` olayı
+3. **AI sonrası:** `Evaluation` (`grading_result_json`) + `initial_analysis_completed` / `analysis_completed` olayı
+
+Frontend henüz `assignmentId` ve token göndermiyor; mevcut akış bozulmadı. Faz 4'te `geminiService.ts` güncellendiğinde kalıcı kayıt otomatik devreye girer.
+
+### 10.4 Değiştirilen Dosyalar
+
+- `backend/app/models.py` — Dört Sokratik varlık + `Submission` genişletmesi
+- `backend/app/services.py` — `grade_submission_with_persistence`, olay loglama
+- `backend/app/main.py` — `create_all()` kaldırıldı; Alembic tek kaynak
+- `backend/app/schemas.py` — `assignmentId`, `researchConsent` opsiyonel alanları
+- `backend/app/routers/users.py` — `get_optional_current_user` (opsiyonel JWT)
+- `backend/app/database.py` — `DATABASE_URL` zorunlu, PostgreSQL `pool_pre_ping`
+- `backend/alembic/` — Alembic yapılandırması ve migrasyon dosyaları
+- `backend/requirements.txt` — `psycopg2-binary==2.9.11`, `alembic==1.13.1`
+
+### 10.5 Bilinen Sorun ve Çözüm
+
+| Sorun | Kök Neden | Çözüm |
+| :--- | :--- | :--- |
+| `column "submission_id" referenced in foreign key constraint does not exist` | `create_all()` mevcut `submissions` tablosunu ALTER etmeden `evaluations` oluşturmaya çalışıyordu | `create_all()` kaldırıldı; `alembic upgrade head` ile şema güncellenir |
+
+### 10.6 Çalıştırılan Testler
+
+| Test | Komut | Sonuç |
+| :--- | :--- | :--- |
+| Alembic migrasyon | `alembic upgrade head` | ✅ Başarılı (`db8700569b4c` head) |
+| DB kalıcılık | `prepare_submission_for_grading` + `finalize_grading_persistence` | ✅ `session_started` → `submission_created` → `initial_analysis_completed` |
+| Sunucu başlatma | `python -c "from app.main import app"` | ✅ Başarılı (create_all kaldırıldıktan sonra) |
