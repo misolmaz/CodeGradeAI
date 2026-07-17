@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import hashlib
 import time
 import google.generativeai as genai
@@ -415,6 +416,54 @@ Tüm metin alanları Türkçe olmalı. Sandwich metodu kullan: olumlu → geliş
 """
 
 
+def sanitize_json(raw_text: str) -> str:
+    """
+    Gemini yanıtı response_mime_type=application/json istenmiş olsa da bazen
+    ```json ... ``` markdown code fence'i içinde veya öncesinde/sonrasında
+    ekstra metinle dönebilir. json.loads'tan önce bu artıkları temizler.
+    """
+    if not raw_text:
+        return raw_text
+
+    cleaned = raw_text.strip()
+
+    # ```json ... ``` veya ``` ... ``` code fence'lerini kaldır.
+    fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+
+    # Modelin JSON'dan önce/sonra eklediği açıklama metinlerine karşı ek güvenlik:
+    # ilk '{' ile son '}' arasındaki bölümü al.
+    first_brace = cleaned.find("{")
+    last_brace = cleaned.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        cleaned = cleaned[first_brace:last_brace + 1]
+
+    return cleaned.strip()
+
+
+def _fallback_grading_result(feedback: str, suggestions: Optional[List[str]] = None) -> GradingResult:
+    """
+    AI yanıtı (token limiti, bozuk/eksik JSON, şema hatası, API hatası vb. nedenlerle)
+    hiçbir şekilde işlenemediğinde frontend'in 500/parse hatasıyla çökmemesi için
+    döndürülen güvenli varsayılan sonuç. v0.2 alanları (rubricScores, errorFindings,
+    socraticFeedback, pedagogicalMetadata) kasıtlı olarak None/null bırakılır —
+    GradingResult şemasında bu alanlar Optional olduğundan frontend bunları güvenle
+    gizler/atlar.
+    """
+    return GradingResult(
+        grade=0,
+        feedback=feedback,
+        codeQuality="Bilinmiyor",
+        suggestions=suggestions or ["Lütfen kodunuzu tekrar gönderin."],
+        unitTests=[],
+        rubricScores=None,
+        errorFindings=None,
+        socraticFeedback=None,
+        pedagogicalMetadata=None,
+    )
+
+
 def _enrich_pedagogical_metadata(result: GradingResult, student_level: str) -> GradingResult:
     """Ensure pedagogicalMetadata uses central v0.2 constants after LLM response."""
     if result.pedagogicalMetadata is None:
@@ -484,21 +533,40 @@ pedagogicalMetadata içinde prompt_version="{PROMPT_VERSION}", rubric_version="{
         response = model.generate_content(final_prompt)
         text = response.text.strip()
         print(f"DEBUG: AI Response: {text}")
-        
-        # Parse JSON response via strict schema, then map to API GradingResult
-        result_json = json.loads(text)
-        strict_result = StrictGradingResult(**result_json)
+
+        # Markdown code fence / gürültü temizliği (bazı yanıtlar ```json ... ``` ile döner).
+        cleaned_text = sanitize_json(text)
+
+        # JSON ayrıştırması: token limitine takılmış yarım yanıtlar
+        # ("Unterminated string starting at...") burada güvenle yakalanır ve
+        # 500 fırlatmadan öğrenciye anlaşılır bir fallback sonuç döndürülür.
+        try:
+            result_json = json.loads(cleaned_text)
+        except json.JSONDecodeError as parse_error:
+            print(f"WARNING: AI JSON ayrıştırma hatası (muhtemelen token limiti/bozuk yanıt): {parse_error}")
+            return _fallback_grading_result(
+                "Yapay zeka yanıtı eksik ya da bozuk oluşturuldu, lütfen kodunuzu tekrar gönderin."
+            )
+
+        # Şema doğrulaması: JSON geçerli olsa da beklenen alanlar eksik/yanlış
+        # tipte olabilir (örn. modelin şemayı tam doldurmadığı durumlar).
+        try:
+            strict_result = StrictGradingResult(**result_json)
+        except Exception as validation_error:
+            print(f"WARNING: AI yanıtı şema doğrulamasından geçemedi: {validation_error}")
+            return _fallback_grading_result(
+                "Yapay zeka yanıtı beklenen formatta oluşturulamadı, lütfen kodunuzu tekrar gönderin."
+            )
+
         result = _map_strict_to_grading_result(strict_result)
         return _enrich_pedagogical_metadata(result, request.studentLevel)
-        
+
     except Exception as e:
+        # Ağ/API seviyesindeki diğer beklenmeyen hatalar (rate limit, timeout, vs.)
+        # dahil olmak üzere hiçbir durumda 500 fırlatılmaz.
         print(f"Error calling Gemini: {e}")
-        return GradingResult(
-            grade=0,
-            feedback=f"Yapay zeka yanıtı işlenirken bir hata oluştu: {str(e)}",
-            codeQuality="Hata",
-            suggestions=["Lütfen tekrar gönderin"],
-            unitTests=[]
+        return _fallback_grading_result(
+            "Yapay zeka servisiyle iletişimde bir sorun oluştu, lütfen daha sonra tekrar deneyin."
         )
 
 

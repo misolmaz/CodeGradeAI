@@ -1,10 +1,9 @@
 // @ts-nocheck
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserRole, Assignment, Announcement, Submission, GradingResult } from './types';
 import { Layout } from './components/Layout';
 import { gradeSubmission } from './services/geminiService';
 import { parseGradingResult } from './utils/parseGradingResult';
-import { db } from './services/persistence';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Login } from './components/Login';
 import { TeacherDashboard } from './components/TeacherDashboard';
@@ -16,7 +15,8 @@ import { LandingPage } from './components/LandingPage';
 import {
   Plus, Calendar, Clock, CheckCircle2, AlertCircle, FileCode,
   ChevronRight, Award, Activity, Search, X, GraduationCap, Trash2,
-  User as UserIcon, Lock as LockIcon, Camera, Save, KeyRound, Edit2
+  User as UserIcon, Lock as LockIcon, Camera, Save, KeyRound, Edit2, Loader2,
+  HelpCircle, Lightbulb, Compass, ArrowRight, Eye
 } from 'lucide-react';
 import Editor from 'react-simple-code-editor';
 // @ts-ignore
@@ -48,18 +48,62 @@ const isDeadlinePassed = (dueDateString: string): boolean => {
   return new Date(dueDateString).getTime() < new Date().getTime();
 };
 
+// Request cancellation (session boundary): whenever a fetch is aborted — because
+// the component unmounted, the session changed (login/logout/tenant switch), or a
+// newer request superseded it — we must silently discard it instead of treating it
+// as an error. This is the "Latest-Request-Wins" rule from the security audit.
+const isAbortError = (error: unknown): boolean =>
+  (error instanceof DOMException && error.name === 'AbortError') ||
+  (typeof error === 'object' && error !== null && (error as any).name === 'AbortError');
 
 
+
+
+const PUBLIC_VIEWS = ['landing', 'login'];
+const DEFAULT_ASSIGNMENT_FORM: Partial<Assignment> = {
+  title: '',
+  description: '',
+  language: 'python',
+  dueDate: '',
+  studentLevel: 'intermediate',
+  targetType: 'all',
+  targetClass: '',
+  targetStudents: []
+};
+
+const parseTargetStudents = (raw: unknown): string[] => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
 
 // --- Main App Content ---
 const AppContent = () => {
-  const { token, role, username, studentNumber, classCode, avatarUrl, userId, logout, updateAvatar, updateName, email } = useAuth();
+  const { token, role, username, studentNumber, classCode, avatarUrl, userId, logout, updateAvatar, updateName, email, isAuthLoading } = useAuth();
 
 
-  // Initialize view from URL or default to 'landing'
+  // Initialize view from URL; no session → login, valid session → role dashboard (home)
   const [currentView, setCurrentView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('view') || 'landing';
+    const view = params.get('view');
+    const hasSession = !!localStorage.getItem('token');
+
+    if (!hasSession) {
+      return view === 'landing' ? 'landing' : 'login';
+    }
+
+    if (!view || view === 'login' || view === 'landing') {
+      return 'home';
+    }
+    return view;
   });
 
   // Handle Browser Back Button (PopState)
@@ -67,10 +111,17 @@ const AppContent = () => {
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
       const view = params.get('view');
-      if (view) {
-        setCurrentView(view);
+      const hasSession = !!localStorage.getItem('token');
+
+      if (!hasSession) {
+        setCurrentView(view === 'landing' ? 'landing' : 'login');
+        return;
+      }
+
+      if (!view || view === 'login' || view === 'landing') {
+        setCurrentView('home');
       } else {
-        setCurrentView('landing');
+        setCurrentView(view);
       }
     };
 
@@ -78,9 +129,16 @@ const AppContent = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Redirect if logged in and on login page
+  // Auth gate: no session → login; valid session on login/landing → home (role dashboard)
   useEffect(() => {
-    if (token && currentView === 'login') {
+    if (!token) {
+      if (!PUBLIC_VIEWS.includes(currentView)) {
+        setCurrentView('login');
+      }
+      return;
+    }
+
+    if (currentView === 'login' || currentView === 'landing') {
       setCurrentView('home');
     }
   }, [token, currentView]);
@@ -99,99 +157,66 @@ const AppContent = () => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [backendStudents, setBackendStudents] = useState<any[]>([]);
+  const [isDataLoading, setIsDataLoading] = useState(() => !!localStorage.getItem('token'));
 
   // Search/Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('all');
 
-  const fetchAllData = async () => {
-    if (!token) return;
-    try {
-      const headers = { 'Authorization': `Bearer ${token}` };
-
-      const [assRes, subRes, annRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/assignments/`, { headers }),
-        fetch(`${API_BASE_URL}/submissions/`, { headers }),
-        fetch(`${API_BASE_URL}/announcements/`, { headers })
-      ]);
-
-
-      if (assRes.ok) {
-        const data = await assRes.json();
-        // Map backend snake_case to frontend camelCase
-        setAssignments(data.map((a: any) => ({
-          id: a.id.toString(),
-          title: a.title,
-          description: a.description,
-          dueDate: a.due_date,
-          language: a.language,
-          studentLevel: a.student_level,
-          status: a.status,
-          targetType: a.target_type,
-          targetClass: a.target_class,
-          targetStudents: a.target_students ? JSON.parse(a.target_students) : [],
-          teacherName: a.teacher_name // Map backend field
-        })));
-      }
-
-      if (subRes.ok) {
-        const data = await subRes.json();
-        // Map backend snake_case to frontend camelCase
-        setSubmissions(data.map((s: any) => ({
-          id: s.id.toString(),
-          assignmentId: s.assignment_id?.toString(),
-          studentId: s.user_id?.toString(),
-          studentName: s.student_name || "Öğrenci",
-          code: s.code_content,
-          submittedAt: s.submitted_at,
-          status: 'graded',
-          gradingResult: parseGradingResult(s.grading_result) ?? undefined
-        })));
-      }
-
-
-      if (annRes.ok) {
-        const data = await annRes.json();
-        setAnnouncements(data.map((a: any) => ({
-          id: a.id.toString(),
-          title: a.title,
-          content: a.content,
-          type: a.type,
-          date: a.date
-        })));
-      }
-    } catch (e) {
-      console.error("Data fetch error", e);
-    }
-  };
-
-  useEffect(() => {
-    fetchAllData();
-  }, [token, currentView]);
-
-  useEffect(() => {
-    const fetchStudents = async () => {
-      if ((role === 'teacher' || role === 'superadmin') && token) {
-        try {
-          const res = await fetch(`${API_BASE_URL}/admin/students`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-
-          if (res.ok) setBackendStudents(await res.json());
-        } catch (e) { console.error(e); }
-      }
-    };
-    fetchStudents();
-
-  }, [role, token, currentView]);
-
   // UI States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
+  // Sokratik Aşamalı Gösterim (Progressive Disclosure): AI Analiz Modalı her açıldığında
+  // 0'dan başlar (sadece farkındalık sorusu). Öğrenci kendi iradesiyle ipucu istedikçe
+  // kademe artar; modal kapandığında 0'a sıfırlanır (bkz. aşağıdaki useEffect).
+  const [scaffoldingLevel, setScaffoldingLevel] = useState(0);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [codeDraft, setCodeDraft] = useState('');
   const [isGrading, setIsGrading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  // Tracks the in-flight AI grading request so it can be cancelled if the user
+  // closes the modal, the session ends, or this component unmounts.
+  const gradingAbortRef = useRef<AbortController | null>(null);
+
+  // Session boundary safety net: cancel any still-running grading request when
+  // this component instance goes away (covers unmount AND the key-based remount
+  // that happens on login/logout/tenant switch).
+  useEffect(() => {
+    return () => {
+      gradingAbortRef.current?.abort();
+    };
+  }, []);
+
+  // Modal her açılıp kapandığında (yeni bir teslimat seçildiğinde de) Sokratik
+  // kademe başlangıç seviyesi yeniden hesaplanır. Varsayılan olarak öğrenci her
+  // seferinde farkındalık sorusuyla (Seviye 0) başlar; ancak iki istisna
+  // durumunda Sokratik aşamalar tamamen atlanıp doğrudan Tam Rapor (Seviye 3)
+  // gösterilir:
+  //   1) Yüksek Puan istisnası: incelenen teslim 90 ve üzeri puan almışsa
+  //      (AI'nın küçük detaylar için kırdığı ufak puanlar Sokratik akışı
+  //      tetiklemesin diye tam 100 yerine bir eşik kullanılır).
+  //   2) "1 Düzeltme Hakkı" istisnası: öğrenci bu ödeve zaten 2. (veya daha
+  //      sonraki) kez kod göndermişse — yani ilk Sokratik ipucu hakkını
+  //      kullanıp tekrar denemişse.
+  useEffect(() => {
+    if (!selectedSubmission) {
+      setScaffoldingLevel(0);
+      return;
+    }
+
+    const isPerfectScore = (selectedSubmission.gradingResult?.grade ?? 0) >= 90;
+
+    const attemptCount = submissions.filter(
+      s =>
+        s.assignmentId === selectedSubmission.assignmentId &&
+        s.studentId === selectedSubmission.studentId
+    ).length;
+    const correctionAttemptUsed = attemptCount >= 2;
+
+    setScaffoldingLevel(isPerfectScore || correctionAttemptUsed ? 3 : 0);
+  }, [selectedSubmission?.id]);
+
   const [modalSearchTerm, setModalSearchTerm] = useState('');
 
   // Profile States
@@ -204,30 +229,234 @@ const AppContent = () => {
   const [profileMsg, setProfileMsg] = useState({ type: '', text: '' });
   const [toast, setToast] = useState<{ title: string; msg: string; visible: boolean } | null>(null);
 
+  // Announcement Management State
+  const [newAnnData, setNewAnnData] = useState({ title: '', content: '', type: 'info' });
+
+  // Create Assignment State
+  const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
+  const [newAssignmentData, setNewAssignmentData] = useState<Partial<Assignment>>({ ...DEFAULT_ASSIGNMENT_FORM });
+
+  const resetAppDataState = () => {
+    setAssignments([]);
+    setSubmissions([]);
+    setAnnouncements([]);
+    setBackendStudents([]);
+    setIsDataLoading(false);
+    setSearchTerm('');
+    setClassFilter('all');
+    setIsModalOpen(false);
+    setSelectedAssignment(null);
+    setSelectedSubmission(null);
+    setScaffoldingLevel(0);
+    setSelectedStudent(null);
+    setCodeDraft('');
+    setIsGrading(false);
+    setSubmitError('');
+    setModalSearchTerm('');
+    setEditingAssignment(null);
+    setNewAssignmentData({ ...DEFAULT_ASSIGNMENT_FORM });
+    setNewAnnData({ title: '', content: '', type: 'info' });
+    setToast(null);
+    setProfileMsg({ type: '', text: '' });
+    setProfilePassData({ old: '', new: '', confirm: '' });
+  };
+
+  const closeCodeModal = () => {
+    // Cancel an in-flight grading/submission request if the user backs out.
+    gradingAbortRef.current?.abort();
+    gradingAbortRef.current = null;
+    setIsModalOpen(false);
+    setSelectedAssignment(null);
+    setCodeDraft('');
+    setIsGrading(false);
+    setSubmitError('');
+  };
+
+  const closeCreateAssignmentModal = () => {
+    setIsModalOpen(false);
+    setEditingAssignment(null);
+    setNewAssignmentData({ ...DEFAULT_ASSIGNMENT_FORM });
+    setModalSearchTerm('');
+  };
+
+  const handleLogout = () => {
+    logout();
+    resetAppDataState();
+    setCurrentView('login');
+  };
+
+  // fetchAllData is invoked both from the auto-refresh effect (with an
+  // AbortSignal tied to the session/component lifecycle) and from various
+  // handlers after a mutation (create/delete) with no signal at all — both are
+  // valid call shapes.
+  const fetchAllData = async (signal?: AbortSignal) => {
+    if (!token) return;
+    setIsDataLoading(true);
+    try {
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      // P1 fix: independent requests via Promise.allSettled — one endpoint
+      // failing (or being aborted) must never prevent the other, successful
+      // responses (e.g. "assignments") from being applied to state.
+      const [assRes, subRes, annRes] = await Promise.allSettled([
+        fetch(`${API_BASE_URL}/assignments/`, { headers, signal }),
+        fetch(`${API_BASE_URL}/submissions/`, { headers, signal }),
+        fetch(`${API_BASE_URL}/announcements/`, { headers, signal })
+      ]);
+
+      if (assRes.status === 'fulfilled') {
+        if (assRes.value.ok) {
+          const data = await assRes.value.json();
+          // Map backend snake_case to frontend camelCase
+          setAssignments((Array.isArray(data) ? data : []).map((a: any) => ({
+            id: a.id.toString(),
+            title: a.title,
+            description: a.description,
+            dueDate: a.due_date,
+            language: a.language,
+            studentLevel: a.student_level,
+            status: a.status,
+            targetType: a.target_type,
+            targetClass: a.target_class,
+            targetStudents: parseTargetStudents(a.target_students),
+            teacherName: a.teacher_name // Map backend field
+          })));
+        } else {
+          setAssignments([]);
+        }
+      } else if (!isAbortError(assRes.reason)) {
+        console.error("Assignments fetch error", assRes.reason);
+      }
+
+      if (subRes.status === 'fulfilled') {
+        if (subRes.value.ok) {
+          const data = await subRes.value.json();
+          // Map backend snake_case to frontend camelCase
+          setSubmissions((Array.isArray(data) ? data : []).map((s: any) => ({
+            id: s.id.toString(),
+            assignmentId: s.assignment_id?.toString(),
+            studentId: s.user_id?.toString(),
+            studentName: s.student_name || "Öğrenci",
+            code: s.code_content,
+            submittedAt: s.submitted_at,
+            status: 'graded',
+            gradingResult: parseGradingResult(s.grading_result) ?? undefined
+          })));
+        } else {
+          setSubmissions([]);
+        }
+      } else if (!isAbortError(subRes.reason)) {
+        console.error("Submissions fetch error", subRes.reason);
+      }
+
+      if (annRes.status === 'fulfilled') {
+        if (annRes.value.ok) {
+          const data = await annRes.value.json();
+          setAnnouncements((Array.isArray(data) ? data : []).map((a: any) => ({
+            id: a.id.toString(),
+            title: a.title,
+            content: a.content,
+            type: a.type,
+            date: a.date
+          })));
+        } else {
+          setAnnouncements([]);
+        }
+      } else if (!isAbortError(annRes.reason)) {
+        console.error("Announcements fetch error", annRes.reason);
+      }
+    } catch (e) {
+      if (!isAbortError(e)) console.error("Data fetch error", e);
+    } finally {
+      // Never touch state on behalf of a request that was cancelled — a newer,
+      // still-in-flight request (or none at all, if we've navigated away) owns
+      // the loading indicator now.
+      if (!signal?.aborted) setIsDataLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!token) {
+      setAssignments([]);
+      setSubmissions([]);
+      setAnnouncements([]);
+      setBackendStudents([]);
+      setIsDataLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    fetchAllData(controller.signal);
+
+    // Cancel any still-pending requests when the view changes, the session
+    // changes, or this component unmounts — this is what stops a delayed
+    // response from a previous context from ever reaching setState.
+    return () => controller.abort();
+  }, [token, currentView]);
+
+  useEffect(() => {
+    if (!((role === 'teacher' || role === 'superadmin') && token)) {
+      setBackendStudents([]);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const fetchStudents = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/admin/students`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: controller.signal
+        });
+
+        if (res.ok) setBackendStudents(await res.json());
+        else setBackendStudents([]);
+      } catch (e) {
+        if (!isAbortError(e)) console.error(e);
+      }
+    };
+    fetchStudents();
+
+    return () => controller.abort();
+  }, [role, token, currentView]);
+
+  // Clear code modal residue when leaving assignments (keep selection for teacher detail)
+  useEffect(() => {
+    if (currentView === 'assignment_detail') return;
+
+    if (currentView !== 'assignments') {
+      setIsModalOpen(false);
+      setCodeDraft('');
+      setSubmitError('');
+      setIsGrading(false);
+      setSelectedAssignment(null);
+      setEditingAssignment(null);
+      setModalSearchTerm('');
+    }
+  }, [currentView]);
+
   useEffect(() => {
     if (avatarUrl) setProfileNewAvatar(avatarUrl);
     else if (studentNumber) setProfileNewAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + studentNumber);
     if (username) setProfileFullName(username);
-  }, [avatarUrl, studentNumber, username]);
+    // Keep the profile form's email field in sync with the auth source of
+    // truth — otherwise a value fetched/updated after the initial mount
+    // (e.g. from the bootstrap /users/me check) would never reach the form.
+    setProfileEmail(email || '');
+  }, [avatarUrl, studentNumber, username, email]);
 
-  // Announcement Management State
-  const [newAnnData, setNewAnnData] = useState({ title: '', content: '', type: 'info' });
-
-
-
-  // Create Assignment State
-  const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
-  const [newAssignmentData, setNewAssignmentData] = useState<Partial<Assignment>>({
-
-    title: '',
-    description: '',
-    language: 'python',
-    dueDate: '',
-    studentLevel: 'intermediate',
-    targetType: 'all',
-    targetClass: '',
-    targetStudents: []
-  });
+  // Bootstrap gate: while the persisted token is being verified against the
+  // backend (see AuthContext), never render an authenticated view or the bare
+  // Login screen — an expired/forged token would otherwise flash as a valid,
+  // empty session (e.g. "no assignments") until the forced logout completes.
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-dark-900 flex flex-col items-center justify-center gap-4">
+        <Loader2 size={40} className="animate-spin text-primary" />
+        <p className="text-slate-400 text-sm font-medium">Oturum doğrulanıyor...</p>
+      </div>
+    );
+  }
 
   if (currentView === 'landing') {
     return <LandingPage
@@ -238,9 +467,6 @@ const AppContent = () => {
   }
 
   if (!token) {
-    // If we are here, we are not logged in.
-    // If view is NOT login (e.g. they tried to access home), redirect to login (or landing)
-    // But for now, let's just show Login if not landing.
     return <Login />;
   }
 
@@ -285,19 +511,7 @@ const AppContent = () => {
 
       if (res.ok) {
         fetchAllData();
-        setIsModalOpen(false);
-        setEditingAssignment(null);
-        setNewAssignmentData({
-          title: '',
-          description: '',
-          language: 'python',
-
-          dueDate: '',
-          studentLevel: 'intermediate',
-          targetType: 'all',
-          targetClass: '',
-          targetStudents: []
-        });
+        closeCreateAssignmentModal();
       }
     } catch (e) {
       console.error(e);
@@ -347,16 +561,24 @@ const AppContent = () => {
   const handleSubmitCode = async () => {
     if (!user || !selectedAssignment) return;
     setIsGrading(true);
+    setSubmitError('');
+
+    // Fresh controller per submission attempt: cancelled by closeCodeModal(),
+    // by the unmount cleanup effect, or implicitly discarded on session change.
+    const controller = new AbortController();
+    gradingAbortRef.current = controller;
+
     try {
       const gradingResult = await gradeSubmission(
         selectedAssignment.description,
         selectedAssignment.language,
         codeDraft,
-        selectedAssignment.studentLevel
+        selectedAssignment.studentLevel,
+        controller.signal
       );
 
       if (gradingResult.grade === 0) {
-        alert(gradingResult.feedback || "Değerlendirme sırasında bir hata oluştu.");
+        setSubmitError(gradingResult.feedback || "Değerlendirme sırasında bir hata oluştu.");
         return;
       }
 
@@ -375,7 +597,8 @@ const AppContent = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
 
       if (res.ok) {
@@ -392,16 +615,37 @@ const AppContent = () => {
           setTimeout(() => setToast(null), 8000);
         }
 
-        fetchAllData();
-        setCurrentView('home');
-        setCodeDraft('');
+        // Yeni değerlendirilmiş teslimatı, AI Analiz Raporu modalını otomatik
+        // açmak için POST cevabından doğrudan inşa ediyoruz (fetchAllData'nın
+        // tamamlanmasını beklemeye gerek kalmadan).
+        const freshSubmission: Submission = {
+          id: responseData.id?.toString(),
+          assignmentId: responseData.assignment_id?.toString(),
+          studentId: responseData.user_id?.toString(),
+          studentName: responseData.student_name || user.name,
+          code: responseData.code_content,
+          submittedAt: responseData.submitted_at,
+          status: 'graded',
+          gradingResult: parseGradingResult(responseData.grading_result) ?? undefined
+        };
+
+        closeCodeModal();
+        await fetchAllData();
+        // Öğrenciyi Ana Sayfaya atmak yerine "Ödevler" görünümünde tutup
+        // sonucu doğrudan Sokratik AI Analiz Raporu modalıyla gösteriyoruz.
+        setCurrentView('assignments');
+        setSelectedSubmission(freshSubmission);
       } else {
-        alert("Gönderim kaydedilemedi.");
+        setSubmitError("Gönderim kaydedilemedi.");
       }
     } catch (error) {
-      alert("Hata oluştu! Lütfen internet bağlantınızı ve API anahtarınızı kontrol edin.");
+      // Latest-Request-Wins: a cancelled request (modal closed, session ended)
+      // is not a user-facing error — swallow it silently.
+      if (isAbortError(error)) return;
+      setSubmitError("Hata oluştu! Lütfen internet bağlantınızı ve API anahtarınızı kontrol edin.");
     } finally {
-      setIsGrading(false);
+      if (!controller.signal.aborted) setIsGrading(false);
+      if (gradingAbortRef.current === controller) gradingAbortRef.current = null;
     }
   };
 
@@ -578,7 +822,7 @@ const AppContent = () => {
           <h2 className="text-2xl font-bold text-white tracking-tight">Ödevler</h2>
           {isTeacher && (
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => { setEditingAssignment(null); setNewAssignmentData({ ...DEFAULT_ASSIGNMENT_FORM }); setIsModalOpen(true); }}
               className="bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95">
               <Plus size={20} />
               Yeni Ödev
@@ -587,7 +831,13 @@ const AppContent = () => {
         </div>
 
         <div className="grid gap-5">
-          {filteredAssignments.map(assignment => {
+          {isDataLoading && assignments.length === 0 && (
+            <div className="text-center py-20 text-slate-400 bg-dark-800/50 rounded-2xl border border-dark-700 border-dashed flex flex-col items-center justify-center gap-4">
+              <Loader2 size={40} className="animate-spin text-primary" />
+              <p className="text-lg font-medium">Yükleniyor...</p>
+            </div>
+          )}
+          {!(isDataLoading && assignments.length === 0) && filteredAssignments.map(assignment => {
             const studentSubmission = user.role === UserRole.STUDENT
               ? submissions.find(s => s.assignmentId === assignment.id && s.studentId === user.id)
 
@@ -694,7 +944,13 @@ const AppContent = () => {
                           </>
                         ) : (
                           <button
-                            onClick={() => { setSelectedAssignment(assignment); setIsModalOpen(true); }}
+                            onClick={() => {
+                              setSelectedAssignment(assignment);
+                              setCodeDraft('');
+                              setSubmitError('');
+                              setIsGrading(false);
+                              setIsModalOpen(true);
+                            }}
                             className="w-full sm:w-auto px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20 active:scale-95 whitespace-nowrap">
                             Ödev Yükle
                           </button>
@@ -707,7 +963,7 @@ const AppContent = () => {
 
             );
           })}
-          {filteredAssignments.length === 0 && (
+          {!isDataLoading && filteredAssignments.length === 0 && (
             <div className="text-center py-20 text-slate-500 bg-dark-800/50 rounded-2xl border border-dark-700 border-dashed">
               <FileCode size={64} className="mx-auto mb-6 opacity-20" />
               <p className="text-lg font-medium opacity-50 text-slate-400">Henüz yayınlanmış bir ödev bulunmamaktadır.</p>
@@ -721,7 +977,7 @@ const AppContent = () => {
             <div className="bg-dark-800 w-full max-w-lg rounded-2xl border border-dark-700 shadow-2xl animate-in zoom-in duration-300">
               <div className="p-6 border-b border-dark-700 flex justify-between items-center text-white">
                 <h3 className="text-xl font-bold">{editingAssignment ? 'Ödevi Düzenle' : 'Yeni Ödev Oluştur'}</h3>
-                <button onClick={() => { setIsModalOpen(false); setEditingAssignment(null); }} className="p-2 hover:bg-dark-700 rounded-full transition-colors">
+                <button onClick={closeCreateAssignmentModal} className="p-2 hover:bg-dark-700 rounded-full transition-colors">
                   <X />
                 </button>
               </div>
@@ -854,7 +1110,7 @@ const AppContent = () => {
                 )}
               </div>
               <div className="p-6 border-t border-dark-700 flex justify-end gap-3 bg-dark-900/10">
-                <button onClick={() => { setIsModalOpen(false); setEditingAssignment(null); }} className="px-5 py-2.5 text-slate-400 hover:text-white font-bold transition-colors">İptal</button>
+                <button onClick={closeCreateAssignmentModal} className="px-5 py-2.5 text-slate-400 hover:text-white font-bold transition-colors">İptal</button>
                 <button onClick={handleCreateAssignment} className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold shadow-lg shadow-primary/20">
                   {editingAssignment ? 'Değişiklikleri Kaydet' : 'Ödevi Yayınla'}
                 </button>
@@ -876,7 +1132,7 @@ const AppContent = () => {
                     <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">{selectedAssignment.language} Ödevi</p>
                   </div>
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-dark-700 rounded-full transition-colors text-slate-400 hover:text-white flex-shrink-0">
+                <button onClick={closeCodeModal} className="p-2 hover:bg-dark-700 rounded-full transition-colors text-slate-400 hover:text-white flex-shrink-0">
                   <X size={20} />
                 </button>
               </div>
@@ -891,6 +1147,11 @@ const AppContent = () => {
                   <p className="text-sm sm:text-lg leading-relaxed italic">"{selectedAssignment.description}"</p>
                 </div>
 
+                {submitError && (
+                  <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-xl text-sm font-medium">
+                    {submitError}
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-3">
                   <div className="flex justify-between items-center px-1">
@@ -900,7 +1161,7 @@ const AppContent = () => {
                   <div className="bg-[#0d1117] border border-dark-700 rounded-2xl overflow-hidden shadow-inner">
                     <Editor
                       value={codeDraft}
-                      onValueChange={code => setCodeDraft(code)}
+                      onValueChange={code => { setCodeDraft(code); if (submitError) setSubmitError(''); }}
                       highlight={code => highlight(code, languages[selectedAssignment.language.toLowerCase()] || languages.javascript)}
                       padding={20}
                       style={{
@@ -917,7 +1178,7 @@ const AppContent = () => {
                 </div>
               </div>
               <div className="p-4 sm:p-6 border-t border-dark-700 flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 bg-dark-900/30 backdrop-blur">
-                <button onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto px-6 py-2.5 text-slate-400 hover:text-white font-bold transition-colors order-2 sm:order-1">İptal</button>
+                <button onClick={closeCodeModal} className="w-full sm:w-auto px-6 py-2.5 text-slate-400 hover:text-white font-bold transition-colors order-2 sm:order-1">İptal</button>
                 <button
                   onClick={handleSubmitCode}
                   disabled={isGrading || !codeDraft || isDeadlinePassed(selectedAssignment.dueDate)}
@@ -1047,16 +1308,102 @@ const AppContent = () => {
     const showDirectSolutionWarning =
       isTeacherView && gradingResult.socraticFeedback?.direct_solution_given === true;
 
+    // Sokratik Aşamalı Gösterim (Progressive Disclosure): sadece öğrenci görünümünde
+    // ve Sokratik geri bildirim verisi mevcutsa devreye girer. Öğretmen görünümü ve
+    // Sokratik verisi olmayan eski kayıtlar her zaman tam raporu doğrudan gösterir.
+    const socratic = gradingResult.socraticFeedback;
+    const isGated = !isTeacherView && !!socratic;
+    const effectiveLevel = isGated ? scaffoldingLevel : 3;
+    const secondaryLabel = effectiveLevel === 2 ? 'Tam Raporu Gör (Önerilmez)' : 'Daha Fazla İpucu';
+
+    // Başarı / maksimum deneme istisnaları: öğrenci zaten yüksek puan aldıysa
+    // veya bu ödeve 2. (ya da daha sonraki) kez gönderim yaptıysa, sistemi
+    // tekrar tekrar denemeye teşvik etmemek için "Kodumu Düzenle" butonu
+    // footer'dan tamamen kaldırılır (yalnızca "Kapat" kalır).
+    const isSuccessful = (gradingResult.grade ?? 0) >= 90;
+    const isMaxRetriesReached = submissions.filter(
+      s =>
+        s.assignmentId === selectedSubmission.assignmentId &&
+        s.studentId === selectedSubmission.studentId
+    ).length >= 2;
+    const hideEditCodeButton = isSuccessful || isMaxRetriesReached;
+
+    const handleEditCode = () => {
+      const targetAssignment = assignments.find(a => a.id === selectedSubmission.assignmentId);
+      setSelectedSubmission(null);
+      if (targetAssignment) {
+        // "Ödevler" görünümüne geçiyoruz ki (rapor Ana Sayfa'daki teslim
+        // geçmişinden açılmış olsa bile) currentView'i 'assignments' dışına
+        // çıkınca kod modalını temizleyen effect (bkz. yukarıda) yeni açılan
+        // editör modalını hemen kapatmasın.
+        setCurrentView('assignments');
+        setSelectedAssignment(targetAssignment);
+        setCodeDraft(selectedSubmission.code);
+        setSubmitError('');
+        setIsGrading(false);
+        setIsModalOpen(true);
+      }
+    };
+
     return (
       <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[100] overflow-y-auto animate-in fade-in duration-300">
         <div className="min-h-screen flex items-center justify-center p-4">
-          <div className="bg-dark-800 w-full max-w-5xl rounded-[2rem] border border-dark-700 shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden relative border-primary/20">
+          <div className="bg-dark-800 w-full max-w-5xl rounded-[2rem] border border-dark-700 shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden relative border-primary/20 flex flex-col max-h-[92vh]">
             <button
               onClick={() => setSelectedSubmission(null)}
               className="absolute top-6 right-6 p-3 bg-dark-700/50 hover:bg-dark-600 rounded-full text-slate-400 hover:text-white z-10 transition-all active:scale-95 shadow-lg border border-dark-600">
               <X size={24} />
             </button>
 
+            {isGated && effectiveLevel < 3 ? (
+              /* --- Sokratik Kapı: Seviye 0 (Farkındalık) / 1 (+Yönlendirme) / 2 (+İpucu) --- */
+              <div className="flex-1 overflow-y-auto p-8 sm:p-16">
+                <div className="max-w-2xl mx-auto flex flex-col items-center text-center py-8">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 mb-8 shadow-lg">
+                    <HelpCircle size={30} />
+                  </div>
+                  <span className="text-primary font-black uppercase tracking-[0.3em] text-[10px] mb-4">Farkındalık Sorusu</span>
+                  <p className="text-2xl sm:text-3xl font-black text-white leading-snug tracking-tight">
+                    {socratic.awareness_question}
+                  </p>
+
+                  {effectiveLevel >= 1 && (
+                    <div className="w-full mt-10 pt-8 border-t border-dark-700/60 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20 mb-4">
+                          <Compass size={22} />
+                        </div>
+                        <span className="text-blue-400 font-black uppercase tracking-[0.3em] text-[10px] mb-3">Yönlendirici Soru</span>
+                        <p className="text-lg sm:text-xl font-bold text-slate-100 leading-relaxed">
+                          {socratic.guiding_question}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {effectiveLevel >= 2 && (
+                    <div className="w-full mt-10 pt-8 border-t border-dark-700/60 animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-4 text-left">
+                      <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Lightbulb size={16} className="text-amber-400" />
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-400">İpucu</h4>
+                        </div>
+                        <p className="text-slate-200 text-sm leading-relaxed">{socratic.progressive_hint}</p>
+                      </div>
+                      <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <ArrowRight size={16} className="text-emerald-400" />
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Sonraki Adım</h4>
+                        </div>
+                        <p className="text-slate-200 text-sm leading-relaxed">{socratic.next_action}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+            /* --- Tam Rapor: Seviye 3 (öğrenci) / her zaman (öğretmen ya da Sokratik veri yok) --- */
+            <div className="flex-1 overflow-y-auto">
             <div className="grid grid-cols-1 lg:grid-cols-4">
               {/* Sidebar Info */}
               <div className="p-10 bg-dark-900/50 border-r border-dark-700/50 h-full">
@@ -1085,7 +1432,7 @@ const AppContent = () => {
               </div>
 
               {/* Detail Content */}
-              <div className="lg:col-span-3 p-10 lg:max-h-[90vh] lg:overflow-y-auto space-y-12">
+              <div className="lg:col-span-3 p-10 space-y-12">
                 <header>
                   <h2 className="text-3xl font-black text-white flex items-center gap-4 tracking-tighter">
                     <div className="w-12 h-12 bg-primary/10 text-primary flex items-center justify-center rounded-2xl border border-primary/20"><Activity size={24} /></div>
@@ -1218,6 +1565,39 @@ const AppContent = () => {
                 </section>
               </div>
             </div>
+            </div>
+            )}
+
+            {isGated && (
+              <div className={`border-t border-dark-700/60 bg-dark-900/60 p-5 sm:p-6 flex flex-col-reverse sm:flex-row items-center gap-3 shrink-0 ${hideEditCodeButton ? 'justify-center' : 'justify-between'}`}>
+                {effectiveLevel < 3 ? (
+                  <button
+                    onClick={() => setScaffoldingLevel(l => Math.min(l + 1, 3))}
+                    className={`w-full sm:w-auto px-6 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 border ${effectiveLevel === 2
+                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                      : 'bg-dark-700 hover:bg-dark-600 text-white border-dark-600'
+                      }`}>
+                    {secondaryLabel}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setSelectedSubmission(null)}
+                    className={`px-6 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl text-sm font-bold transition-all border border-dark-600 active:scale-95 ${hideEditCodeButton ? 'w-full sm:w-auto sm:min-w-[200px]' : 'w-full sm:w-auto'}`}>
+                    Kapat
+                  </button>
+                )}
+                {/* Başarılı (>=90 puan) veya maksimum deneme hakkı (2+ gönderim)
+                    durumunda öğrenciyi tekrar denemeye teşvik etmemek için
+                    "Kodumu Düzenle" butonu tamamen gizlenir. */}
+                {!hideEditCodeButton && (
+                  <button
+                    onClick={handleEditCode}
+                    className="w-full sm:w-auto px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-black transition-all shadow-lg shadow-primary/20 active:scale-95">
+                    Kodumu Düzenle
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1698,7 +2078,7 @@ const AppContent = () => {
   };
 
   return (
-    <Layout user={user} onLogout={logout} currentView={currentView} setCurrentView={setCurrentView}>
+    <Layout user={user} onLogout={handleLogout} currentView={currentView} setCurrentView={setCurrentView}>
       {currentView === 'home' && renderHomeView()}
       {currentView === 'teacher_dashboard' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && <TeacherDashboard />}
       {currentView === 'assignments' && renderAssignmentsView()}
@@ -1730,10 +2110,22 @@ const AppContent = () => {
   );
 };
 
+// Reads the session boundary marker from AuthContext and applies it as a React
+// `key` on AppContent. Changing `key` forces React to unmount the previous
+// AppContent instance (discarding all of its state, closures, and any
+// in-flight requests it had queued via useEffect cleanups) and mount a brand
+// new one — guaranteeing a clean slate on every login, logout, and tenant
+// switch. This is the primary defense against stale-session data leaking into
+// a different user's view.
+const AppRoot = () => {
+  const { sessionNonce } = useAuth();
+  return <AppContent key={sessionNonce} />;
+};
+
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <AppRoot />
     </AuthProvider>
   );
 }

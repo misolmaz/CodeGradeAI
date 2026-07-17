@@ -306,3 +306,63 @@ Frontend henüz `assignmentId` ve token göndermiyor; mevcut akış bozulmadı. 
 | Alembic migrasyon | `alembic upgrade head` | ✅ Başarılı (`db8700569b4c` head) |
 | DB kalıcılık | `prepare_submission_for_grading` + `finalize_grading_persistence` | ✅ `session_started` → `submission_created` → `initial_analysis_completed` |
 | Sunucu başlatma | `python -c "from app.main import app"` | ✅ Başarılı (create_all kaldırıldıktan sonra) |
+
+---
+
+## 11. Faz 4 — Sokratik İskeleleme (Scaffolding)
+
+**Tarih:** 2026-07-17  
+**Kapsam:** AI Analiz Raporu modalının Sokratik "Aşamalı Gösterim" (Progressive Disclosure) mantığına geçirilmesi, iskeleleme "fading" (destek geri çekme) kuralları, ilgili UX routing düzeltmeleri ve backend JSON ayrıştırma güvenliği. Yalnızca `frontend/App.tsx` ve `backend/app/services.py` değiştirildi; veritabanı modeli değiştirilmedi.
+
+### 11.1 Aşamalı Gösterim (Progressive Disclosure) — Faz 4.0
+
+AI Analiz Raporu modalı artık tüm veriyi (puan, rubrik, hata listesi, Sokratik geri bildirim) tek seferde göstermez. `scaffoldingLevel` state'i (0–3) modalın ne kadarının açıldığını kontrol eder:
+
+| Seviye | Gösterilen İçerik |
+| :--- | :--- |
+| 0 | Yalnızca `socraticFeedback.awareness_question` (Farkındalık Sorusu) |
+| 1 | + `guiding_question` (Yönlendirici Soru) |
+| 2 | + `progressive_hint` ve `next_action` (İpucu ve Sonraki Adım) |
+| 3 | Tam Rapor: puan, rubrik alt puanları, birim testleri, hata listesi, gönderilen kod |
+
+- Gizleme yalnızca **öğrenci görünümünde** ve `socraticFeedback` verisi mevcutsa (`isGated`) uygulanır. Öğretmen/süper admin görünümü ve Sokratik verisi olmayan eski kayıtlar her zaman doğrudan Seviye 3'ü (tam rapor) gösterir.
+- Footer'da iki dinamik aksiyon butonu bulunur: **"Kodumu Düzenle"** (modalı kapatıp editörü Sokratik feedback göstermeden yeniden açar) ve **"Daha Fazla İpucu"** (Seviye 2'de "Tam Raporu Gör (Önerilmez)" uyarı metnine döner; Seviye 3'te "Kapat"a dönüşür).
+
+### 11.2 Faz 4.1 — UX Routing Düzeltmeleri
+
+İki yönlendirme hatası giderildi:
+
+1. **Gönderim sonrası Ana Sayfa'ya atma hatası:** `handleSubmitCode` başarılı teslimden sonra `setCurrentView('home')` çağırıyordu. Kaldırıldı; öğrenci "Ödevler" görünümünde kalır ve POST yanıtından inşa edilen `Submission` nesnesiyle AI Analiz Raporu modalı otomatik açılır.
+2. **"Kodumu Düzenle" Ana Sayfa'ya düşme hatası:** Rapor modalı Ana Sayfa'daki "Ödev Teslim Geçmişim" listesinden açıldığında `currentView` `'home'` kalıyordu; `currentView !== 'assignments'` olduğunda kod modalını temizleyen `useEffect`, yeniden açılan editör modalını anında kapatıyordu. `handleEditCode` artık editörü açmadan önce `setCurrentView('assignments')` çağırır.
+
+### 11.3 Faz 4.2 / 4.2.2 — "Fading" (Destek Geri Çekme) Kuralları
+
+Öğrenciyi gereksiz yere Sokratik adımlarla yormamak için `scaffoldingLevel`'in başlangıç değeri artık statik `0` değil, iki istisnaya bağlı dinamik bir kural setiyle hesaplanır (modal her açıldığında yeniden değerlendirilir):
+
+- **Yüksek Puan istisnası:** İncelenen teslimin puanı **90 ve üzeri** ise (başlangıçta tam puan `=== 100` idi; AI'nın küçük detaylar için kırdığı puanlar yüzünden `>= 90`'a esnetildi) doğrudan Seviye 3 (Tam Rapor) ile başlar.
+- **"1 Düzeltme Hakkı" istisnası:** Öğrencinin aynı ödeve (`assignmentId` + `studentId`) ait teslim sayısı **2 veya daha fazla** ise (yani ilk Sokratik ipucu hakkını kullanıp tekrar denemişse), puana bakılmaksızın doğrudan Seviye 3 ile başlar.
+- Bu iki koşuldan biri doğruysa (`isSuccessful || isMaxRetriesReached`) footer'daki **"Kodumu Düzenle"** butonu tamamen gizlenir; öğrenciyi tekrar denemeye teşvik eden hiçbir aksiyon kalmaz, yalnızca **"Kapat"** butonu gösterilir (tek başına ortalanmış stille).
+- Yalnızca ilk deneme + 90 altı puan durumunda mevcut Sokratik akış (Seviye 0'dan başlama) değişmeden çalışmaya devam eder.
+
+### 11.4 Backend JSON Ayrıştırma Güvenliği
+
+`backend/app/services.py` içindeki `grade_submission`, AI'dan dönen yanıtın bozuk/eksik JSON (örn. token limitine takılmış "Unterminated string...") olduğu durumlarda 500 hatası fırlatmayacak şekilde güçlendirildi:
+
+- **`sanitize_json(raw_text)`:** ` ```json ... ``` ` / ` ``` ... ``` ` markdown code fence'lerini ve modelin JSON dışına eklediği gürültü metnini (ilk `{` – son `}` arası alınarak) temizler.
+- **Katmanlı hata yakalama:** `json.loads` artık özel olarak `except json.JSONDecodeError` ile, şema doğrulaması (`StrictGradingResult(**result_json)`) ayrı bir `try/except` ile sarıldı; ikisi de ayrı `WARNING:` logları üretir.
+- **`_fallback_grading_result(feedback)`:** Ayrıştırma/doğrulama/API hatalarının tümünde `grade=0` ve tüm v0.2 alanları (`rubricScores`, `errorFindings`, `socraticFeedback`, `pedagogicalMetadata`) `None`/`null` olan güvenli bir `GradingResult` döndürür; frontend bu alanları zaten opsiyonel kabul ettiğinden çökme yaşanmaz.
+
+### 11.5 Değiştirilen Dosyalar
+
+- `frontend/App.tsx` — `scaffoldingLevel` state + dinamik başlangıç kuralları, Sokratik "kapı" UI'ı, footer aksiyon butonları, `handleSubmitCode`/`handleEditCode` routing düzeltmeleri
+- `backend/app/services.py` — `sanitize_json`, `_fallback_grading_result`, katmanlı `try/except` ile JSON ayrıştırma güvenliği
+
+### 11.6 Çalıştırılan Testler
+
+| Test | Komut / Yöntem | Sonuç |
+| :--- | :--- | :--- |
+| Frontend syntax | `npx tsc --noEmit` (App.tsx `@ts-nocheck` altında parse edildi) | ✅ Başarılı (App.tsx'te hata yok; önceden var olan `geminiService.ts` hatası hariç) |
+| Frontend HMR | Vite dev sunucusu (`npm run dev`) canlı reload | ✅ Her değişiklikte hatasız `hmr update` |
+| Backend syntax | `python -m py_compile app/services.py` | ✅ Başarılı |
+| `sanitize_json` / fallback birim testi | Geçici script: fenced/unfenced JSON, kasıtlı bozuk (`Unterminated string`) girdi, fallback şema kontrolü | ✅ Tümü beklenen sonucu verdi |
+| Uçtan uca (tarayıcı) | Öğrenci girişiyle gönderim → otomatik rapor açılışı, "Kodumu Düzenle" akışı, 1. vs 2. gönderim Sokratik atlama | ✅ Doğrulandı |
