@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from ..database import get_db
 from ..models import User, Submission, Assignment, UserBadge
 from .users import get_current_user
@@ -41,8 +41,13 @@ async def get_leaderboard(
     students = users_query.all()
     student_ids = [s.id for s in students]
     
-    # Fetch all relevant submissions
-    submissions = db.query(Submission).filter(Submission.user_id.in_(student_ids)).all()
+    # Fetch all relevant submissions (evaluation eager-loaded for JSONB fallback, assignment for Early Bird bonus)
+    submissions = (
+        db.query(Submission)
+        .options(joinedload(Submission.evaluation), joinedload(Submission.assignment))
+        .filter(Submission.user_id.in_(student_ids))
+        .all()
+    )
     
     # Fetch all badges
     earned_badges = db.query(UserBadge).filter(UserBadge.user_id.in_(student_ids)).all()
@@ -73,9 +78,18 @@ async def get_leaderboard(
         
         for sub in student_subs:
             try:
-                result_json = json.loads(sub.grading_result)
-                score = int(result_json.get("grade", 0))
-            except:
+                raw_result = sub.grading_result
+                # Faz 3 (JSONB) sonrası dict olarak gelir; eski kayıtlar hâlâ JSON string olabilir.
+                if isinstance(raw_result, str):
+                    result_json = json.loads(raw_result)
+                elif isinstance(raw_result, dict):
+                    result_json = raw_result
+                elif sub.evaluation is not None:
+                    result_json = sub.evaluation.grading_result_json or {}
+                else:
+                    result_json = {}
+                score = int(result_json.get("grade", 0)) if isinstance(result_json, dict) else 0
+            except Exception:
                 score = 0
                 
             # Bonus Calculations

@@ -40,27 +40,31 @@ export const SuperAdminDashboard = () => {
         password: ''
     });
 
-    const fetchData = async () => {
+    const fetchData = async (signal?: AbortSignal) => {
         setIsLoading(true);
         try {
             const headers = { 'Authorization': `Bearer ${token}` };
-            const [statsRes, tenantsRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/admin/stats`, { headers }),
-                fetch(`${API_BASE_URL}/admin/tenants`, { headers })
+            // Independent requests: one failing/aborting must not block the other.
+            const [statsRes, tenantsRes] = await Promise.allSettled([
+                fetch(`${API_BASE_URL}/admin/stats`, { headers, signal }),
+                fetch(`${API_BASE_URL}/admin/tenants`, { headers, signal })
             ]);
 
-            if (statsRes.ok) setStats(await statsRes.json());
-            if (tenantsRes.ok) setTenants(await tenantsRes.json());
+            if (statsRes.status === 'fulfilled' && statsRes.value.ok) setStats(await statsRes.value.json());
+            if (tenantsRes.status === 'fulfilled' && tenantsRes.value.ok) setTenants(await tenantsRes.value.json());
 
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'AbortError') return;
             console.error("Dashboard data fetch error:", error);
         } finally {
-            setIsLoading(false);
+            if (!signal?.aborted) setIsLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchData();
+        const controller = new AbortController();
+        fetchData(controller.signal);
+        return () => controller.abort();
     }, [token]);
 
     const handleToggleStatus = async (tenant: Tenant) => {

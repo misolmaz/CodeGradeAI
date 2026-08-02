@@ -1,12 +1,13 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Form
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import User, Organization
 from ..auth import verify_password
 from ..jwt_auth import create_access_token, Token
+from .users import get_current_user, get_current_token_payload
 from datetime import timedelta
 
 router = APIRouter(tags=["Authentication"])
@@ -89,14 +90,23 @@ async def login_for_access_token(
 
     # 4. Generate Token for the selected user
     access_token_expires = timedelta(minutes=60)
-    
+
+    # Security: `linked_org_ids` records every organization for which THIS password
+    # was actually verified in step 2 above (valid_users). This is the only set of
+    # tenants the resulting session is allowed to switch into later (see
+    # /token/switch) without re-entering a password — it must never be derived from
+    # a bare student_number match, since student numbers are only unique per-org and
+    # can coincidentally collide across unrelated tenants.
+    linked_org_ids = sorted({u.organization_id for u in valid_users if u.organization_id is not None})
+
     # We embed org_id in the token to ensure the session is bound to a specific context
     access_token = create_access_token(
         data={
             "sub": selected_user.student_number, 
             "role": selected_user.role,
             "org_id": selected_user.organization_id,
-            "user_id": selected_user.id
+            "user_id": selected_user.id,
+            "linked_org_ids": linked_org_ids
         }, 
         expires_delta=access_token_expires
     )
@@ -125,39 +135,57 @@ async def login_for_access_token(
 @router.post("/token/switch")
 async def switch_organization_token(
     organization_id: int,
-    current_user: User = Depends(get_db), # Placeholder, actual dependency below
-    db: Session = Depends(get_db),
-    token: str = Depends(OAuth2PasswordBearer(tokenUrl="token"))
+    current_user: User = Depends(get_current_user),
+    token_payload: dict = Depends(get_current_token_payload),
+    db: Session = Depends(get_db)
 ):
-    from jose import jwt, JWTError
-    from ..jwt_auth import SECRET_KEY, ALGORITHM
-    
-    # 1. Decode existing token to verify identity
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        student_number: str = payload.get("sub")
-        if student_number is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    """
+    Switches the active session to another organization WITHOUT re-entering a
+    password.
 
-    # 2. Verify target user exists in target organization
+    Security: this is only safe because `current_user` was resolved from the
+    token's `user_id` (an exact, verified Primary Key lookup — see
+    get_current_user), and because we ONLY allow switching into organizations that
+    are present in the `linked_org_ids` claim. That claim is populated at /token
+    login time and only ever contains organizations for which the submitted
+    password was cryptographically verified against that specific account (see
+    valid_users in login_for_access_token). We deliberately do NOT fall back to a
+    bare `student_number` match against the target organization: student numbers
+    are only unique *within* an organization, so two unrelated people in different
+    schools can share the same student_number, and matching on it alone would let
+    an attacker hijack a stranger's account in another tenant.
+    """
+    linked_org_ids = set(token_payload.get("linked_org_ids") or [])
+    # The organization embedded in the current token is always implicitly "owned".
+    if current_user.organization_id is not None:
+        linked_org_ids.add(current_user.organization_id)
+
+    if organization_id not in linked_org_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu kuruma geçiş için yetkiniz yok. Lütfen şifrenizle tekrar giriş yapın."
+        )
+
+    # Verify target user exists in target organization AND is the same identity
+    # (same student_number) whose password was already verified for this org.
     target_user = db.query(User).filter(
-        User.student_number == student_number,
+        User.student_number == current_user.student_number,
         User.organization_id == organization_id
     ).first()
-    
+
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found in target organization")
-    
-    # 3. Generate new token
+
+    # 3. Generate new token, carrying forward the same verified linked_org_ids so the
+    # user can keep switching between their already-verified tenants.
     access_token_expires = timedelta(minutes=60)
     access_token = create_access_token(
         data={
             "sub": target_user.student_number, 
             "role": target_user.role,
             "org_id": target_user.organization_id,
-            "user_id": target_user.id
+            "user_id": target_user.id,
+            "linked_org_ids": sorted(linked_org_ids)
         }, 
         expires_delta=access_token_expires
     )

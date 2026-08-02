@@ -28,28 +28,34 @@ export const SuperAdminHome = ({ setCurrentView }: { setCurrentView: (view: stri
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        const controller = new AbortController();
+
         const fetchHomeData = async () => {
             try {
                 const headers = { 'Authorization': `Bearer ${token}` };
-                const [statsRes, tenantsRes] = await Promise.all([
-                    fetch(`${API_BASE_URL}/admin/stats`, { headers }),
-                    fetch(`${API_BASE_URL}/admin/tenants`, { headers })
+                // Independent requests: one failing/aborting must not block the other.
+                const [statsRes, tenantsRes] = await Promise.allSettled([
+                    fetch(`${API_BASE_URL}/admin/stats`, { headers, signal: controller.signal }),
+                    fetch(`${API_BASE_URL}/admin/tenants`, { headers, signal: controller.signal })
                 ]);
 
-                if (statsRes.ok) setStats(await statsRes.json());
-                if (tenantsRes.ok) {
-                    const allTenants: Tenant[] = await tenantsRes.json();
+                if (statsRes.status === 'fulfilled' && statsRes.value.ok) setStats(await statsRes.value.json());
+                if (tenantsRes.status === 'fulfilled' && tenantsRes.value.ok) {
+                    const allTenants: Tenant[] = await tenantsRes.value.json();
                     // Sort by student count desc and take top 5
                     const sorted = allTenants.sort((a, b) => b.student_count - a.student_count).slice(0, 5);
                     setTopTenants(sorted);
                 }
-            } catch (error) {
+            } catch (error: any) {
+                if (error?.name === 'AbortError') return;
                 console.error("SuperAdmin Home Fetch Error", error);
             } finally {
-                setLoading(false);
+                if (!controller.signal.aborted) setLoading(false);
             }
         };
         fetchHomeData();
+
+        return () => controller.abort();
     }, [token]);
 
     const StatCard = ({ title, value, subtext, icon: Icon, color }: any) => (

@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import List, Literal, Optional
+import json
+from pydantic import BaseModel, Field, field_validator
+from typing import Any, Dict, List, Literal, Optional, Union
 from datetime import datetime
 
 # --- v0.2 Pedagogical Taxonomies (Faz 1) ---
@@ -132,7 +133,19 @@ class AnnouncementOut(AnnouncementBase):
 class SubmissionCreate(BaseModel):
     assignment_id: int | None = None
     code_content: str
-    grading_result: str # JSON string
+    # Faz 3 (JSONB) sonrası hem eski JSON string payload'larını hem de
+    # doğrudan JSON nesnesi gönderen istemcileri kabul eder; her ikisi de dict'e normalize edilir.
+    grading_result: Union[str, Dict[str, Any]]
+
+    @field_validator("grading_result", mode="before")
+    @classmethod
+    def _normalize_grading_result(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return v
 
 class SubmissionOut(BaseModel):
     id: int
@@ -140,9 +153,21 @@ class SubmissionOut(BaseModel):
     student_name: str | None = None
     assignment_id: int | None = None
     code_content: str
-    grading_result: str
+    # JSONB kolonundan dict olarak gelir; eski (Faz 2 öncesi) kayıtlar string
+    # olarak saklanmış olabileceğinden geriye dönük uyumluluk için otomatik parse edilir.
+    grading_result: Optional[Dict[str, Any]] = None
     submitted_at: datetime
     new_badges: List[Badge] = []
+
+    @field_validator("grading_result", mode="before")
+    @classmethod
+    def _parse_grading_result(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return v
 
     class Config:
         from_attributes = True

@@ -55,8 +55,17 @@ async def delete_announcement(
 ):
     if current_user.role not in ["teacher", "superadmin"]:
         raise HTTPException(status_code=403, detail="Yetkiniz yok")
-    
-    db_announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
+
+    query = db.query(Announcement).filter(Announcement.id == announcement_id)
+
+    # Security (tenant isolation): a Teacher may only delete announcements that
+    # belong to their own organization (or global ones they authored under it).
+    # Only Superadmin is allowed to delete announcements across any tenant,
+    # including global (organization_id == None) ones.
+    if current_user.role == "teacher":
+        query = query.filter(Announcement.organization_id == current_user.organization_id)
+
+    db_announcement = query.first()
     if not db_announcement:
         raise HTTPException(status_code=404, detail="Duyuru bulunamadı")
     

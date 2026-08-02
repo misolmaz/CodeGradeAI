@@ -6,7 +6,8 @@ export const gradeSubmission = async (
   assignmentDescription: string,
   assignmentLanguage: string,
   studentCode: string,
-  studentLevel: string = "beginner"
+  studentLevel: string = "beginner",
+  signal?: AbortSignal
 ): Promise<GradingResult> => {
   try {
     const response = await fetch(`${BACKEND_URL}/api/grade`, {
@@ -20,6 +21,7 @@ export const gradeSubmission = async (
         studentCode,
         studentLevel,
       }),
+      signal,
     });
 
     if (!response.ok) {
@@ -31,6 +33,13 @@ export const gradeSubmission = async (
     return result;
 
   } catch (error) {
+    // Cancellation (session ended / user navigated away / modal closed) is not a
+    // real grading error — let the caller detect and silently ignore it instead
+    // of surfacing a fake "connection failed" result.
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+
     console.error("Error grading submission:", error);
     return {
       grade: 0,

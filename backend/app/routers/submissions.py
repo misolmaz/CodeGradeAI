@@ -1,14 +1,29 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy.orm import Session, joinedload
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 from ..database import get_db
 from ..models import Submission, User, Assignment
 from ..schemas import SubmissionCreate, SubmissionOut, Badge
 from .users import get_current_user
+from .assignments import is_assignment_targeted_to_user
 from ..badges import check_badges
 
 router = APIRouter(prefix="/submissions", tags=["Submissions"])
+
+
+def _coerce_grading_result(raw: Any) -> Optional[Dict[str, Any]]:
+    """JSONB (dict) veya eski kayıtlardan gelen JSON string'i güvenle dict'e çevirir."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
 
 @router.post("/", response_model=SubmissionOut)
 async def create_submission(
@@ -20,7 +35,13 @@ async def create_submission(
     assignment = db.query(Assignment).filter(Assignment.id == submission.assignment_id, Assignment.organization_id == current_user.organization_id).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Ödev bulunamadı")
-    
+
+    # Security: enforce assignment targeting (class/specific-student) server-side.
+    # Previously this was only checked in the frontend UI, so a student could call
+    # this endpoint directly to submit to an assignment never assigned to them.
+    if not is_assignment_targeted_to_user(assignment, current_user):
+        raise HTTPException(status_code=403, detail="Bu ödev size atanmamış.")
+
     if assignment.due_date:
         try:
             # Handle ISO format from seed or simple date string
@@ -63,15 +84,32 @@ async def get_submissions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Submission).join(User).filter(User.organization_id == current_user.organization_id)
-    if current_user.role != "teacher":
+    # joinedload: owner (öğrenci adı) ve evaluation (Faz 3 JSONB fallback) N+1 sorgusunu önler.
+    query = (
+        db.query(Submission)
+        .options(joinedload(Submission.owner), joinedload(Submission.evaluation))
+        .join(User, Submission.user_id == User.id)
+        .filter(User.organization_id == current_user.organization_id)
+    )
+    if current_user.role not in ("teacher", "superadmin"):
         query = query.filter(Submission.user_id == current_user.id)
-    
-    results = query.all()
-    # Manually attach full_name for now or use a join
+
+    results = query.order_by(Submission.submitted_at.desc()).all()
+
+    output: List[SubmissionOut] = []
     for res in results:
-        res.student_name = res.owner.full_name
-    return results
+        # Faz 3: submissions.grading_result senkronize olmadıysa evaluations tablosundaki
+        # tam JSONB sonucuna düş (submission_id/evaluation ilişkisi üzerinden).
+        grading_result = _coerce_grading_result(res.grading_result)
+        if not grading_result and res.evaluation is not None:
+            grading_result = _coerce_grading_result(res.evaluation.grading_result_json)
+
+        submission_out = SubmissionOut.model_validate(res)
+        submission_out.grading_result = grading_result
+        submission_out.student_name = res.owner.full_name if res.owner else "Öğrenci"
+        output.append(submission_out)
+
+    return output
 
 
 @router.delete("/{submission_id}")

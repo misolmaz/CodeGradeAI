@@ -11,29 +11,40 @@ export const TeacherDashboard = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState<any>(null);
     const [students, setStudents] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const fetchStudents = async () => {
-        if (!token) return;
+    const fetchStudents = async (signal?: AbortSignal) => {
+        if (!token) {
+            setStudents([]);
+            setIsLoading(false);
+            return;
+        }
         setIsLoading(true);
         try {
             const response = await fetch(`${API_BASE_URL}/admin/students`, {
 
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Authorization': `Bearer ${token}` },
+                signal
             });
             if (response.ok) {
                 const data = await response.json();
-                setStudents(data);
+                setStudents(Array.isArray(data) ? data : []);
+            } else {
+                setStudents([]);
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'AbortError') return;
             console.error("Öğrenciler yüklenemedi:", error);
+            setStudents([]);
         } finally {
-            setIsLoading(false);
+            if (!signal?.aborted) setIsLoading(false);
         }
     };
 
     React.useEffect(() => {
-        fetchStudents();
+        const controller = new AbortController();
+        fetchStudents(controller.signal);
+        return () => controller.abort();
     }, [token]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

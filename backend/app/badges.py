@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timedelta
 import json
 from .models import UserBadge, Submission, Assignment
@@ -28,14 +28,27 @@ BADGE_DEFINITIONS = {
 
 def get_score(submission: Submission) -> int:
     try:
-        data = json.loads(submission.grading_result)
+        data = submission.grading_result
+        # Faz 3 (JSONB) sonrası dict olarak gelir; eski kayıtlar hâlâ JSON string olabilir.
+        if isinstance(data, str):
+            data = json.loads(data)
+        if not isinstance(data, dict):
+            if data is None and submission.evaluation is not None:
+                data = submission.evaluation.grading_result_json
+            if not isinstance(data, dict):
+                return 0
         return int(data.get("grade", 0))
-    except:
+    except Exception:
         return 0
 
 def check_badges(user_id: int, db: Session, current_submission_id: int = None):
-    # Fetch all submissions for user
-    submissions = db.query(Submission).filter(Submission.user_id == user_id).all()
+    # Fetch all submissions for user (evaluation/assignment eager-loaded to avoid N+1)
+    submissions = (
+        db.query(Submission)
+        .options(joinedload(Submission.evaluation), joinedload(Submission.assignment))
+        .filter(Submission.user_id == user_id)
+        .all()
+    )
     
     # Fetch existing badges
     existing_badges = db.query(UserBadge).filter(UserBadge.user_id == user_id).all()

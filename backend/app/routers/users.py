@@ -23,23 +23,20 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: int = payload.get("user_id")
-        student_number: str = payload.get("sub")
-        
-        if user_id is None and student_number is None:
+
+        # Security: user_id (exact Primary Key) is REQUIRED. The legacy fallback of
+        # looking a user up by student_number alone (without an organization_id filter)
+        # has been removed: student numbers are only unique *within* an organization,
+        # so an org-less lookup could silently resolve to a different person in a
+        # different tenant. Tokens issued without user_id (pre-multitenancy) are
+        # rejected and must be re-issued via a fresh login.
+        if user_id is None:
             raise credentials_exception
-            
+
     except JWTError:
         raise credentials_exception
-        
-    if user_id:
-        # Preferred: Exact user lookup by Primary Key (handles multi-tenancy correctly)
-        user = db.query(User).filter(User.id == user_id).first()
-    elif student_number:
-        # Fallback: Lookup by student_number (Might be ambiguous in multi-tenant setup)
-        # Should ideally filter by org_id too if present in legacy token
-        user = db.query(User).filter(User.student_number == student_number).first()
-    else:
-        user = None
+
+    user = db.query(User).filter(User.id == user_id).first()
 
     if user is None:
         raise credentials_exception
@@ -55,17 +52,25 @@ async def get_optional_current_user(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: int = payload.get("user_id")
-        student_number: str = payload.get("sub")
-        if user_id is None and student_number is None:
+        if user_id is None:
             return None
     except JWTError:
         return None
 
-    if user_id:
-        return db.query(User).filter(User.id == user_id).first()
-    if student_number:
-        return db.query(User).filter(User.student_number == student_number).first()
-    return None
+    return db.query(User).filter(User.id == user_id).first()
+
+
+async def get_current_token_payload(token: str = Depends(oauth2_scheme)) -> dict:
+    """Returns the raw JWT claims for endpoints that need session-provenance data
+    (e.g. which organizations were verified with a password at login time)."""
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 @router.get("/me")
 async def read_users_me(current_user: User = Depends(get_current_user)):
@@ -116,21 +121,31 @@ async def update_profile(
 @router.get("/me/organizations")
 async def get_my_organizations(
     current_user: User = Depends(get_current_user),
+    token_payload: dict = Depends(get_current_token_payload),
     db: Session = Depends(get_db)
 ):
     """
-    Returns all organizations where the current user (identified by student_number) has an account.
-    This enables the 'Tenant Switcher' feature.
+    Returns the organizations the current session is allowed to switch into
+    (the 'Tenant Switcher' feature).
+
+    Security: This must NOT be a blind lookup of every account sharing the same
+    student_number, since student numbers are only unique per-organization and can
+    coincidentally collide across unrelated tenants (account takeover risk). Instead
+    we only trust the `linked_org_ids` claim, which the /token endpoint populates
+    with the organizations for which the supplied password was actually verified
+    at login time.
     """
-    # Find all user records with the same student number
-    # Security: We assume if you are logged in as student X, you can see all orgs for student X.
-    # Ideally we should verify passwords but we are already authenticated.
-    
-    # Import Organization here to avoid circular imports if any, or ensure it's imported at top
     from ..models import Organization
-    
-    user_records = db.query(User).filter(User.student_number == current_user.student_number).all()
-    
+
+    linked_org_ids = token_payload.get("linked_org_ids") or []
+    if current_user.organization_id and current_user.organization_id not in linked_org_ids:
+        linked_org_ids = [*linked_org_ids, current_user.organization_id]
+
+    user_records = db.query(User).filter(
+        User.student_number == current_user.student_number,
+        User.organization_id.in_(linked_org_ids)
+    ).all()
+
     org_list = []
     for u in user_records:
         if u.organization_id:

@@ -40,10 +40,12 @@ export const Leaderboard = () => {
     const [isRulesOpen, setIsRulesOpen] = useState(false);
 
     useEffect(() => {
-        fetchLeaderboard();
+        const controller = new AbortController();
+        fetchLeaderboard(controller.signal);
+        return () => controller.abort();
     }, [filterClass]);
 
-    const fetchLeaderboard = async () => {
+    const fetchLeaderboard = async (signal?: AbortSignal) => {
         try {
             setIsLoading(true);
             const url = filterClass
@@ -51,17 +53,19 @@ export const Leaderboard = () => {
                 : `${API_BASE_URL}/leaderboard/`;
 
             const res = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Authorization': `Bearer ${token}` },
+                signal
             });
 
             if (res.ok) {
                 const data = await res.json();
                 setLeaderboard(data);
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'AbortError') return;
             console.error(error);
         } finally {
-            setIsLoading(false);
+            if (!signal?.aborted) setIsLoading(false);
         }
     };
 
