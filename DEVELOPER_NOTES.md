@@ -428,3 +428,36 @@ AI Analiz Raporu modalı artık tüm veriyi (puan, rubrik, hata listesi, Sokrati
 | Backend syntax/import | `python -c "from app.routers import analytics"` | ✅ Başarılı |
 | Frontend TypeScript | `npx tsc --noEmit` | ✅ Hatasız (önceki `ImportMeta.env` uyarısı giderildi) |
 | Uçtan uca (tarayıcı) | `test.user` (teacher) girişiyle `/analytics/teacher-summary` çağrısı, sınıf filtresi, üç sekme | ✅ Doğrulandı |
+
+---
+
+## 13. Faz 6 — Canlıya Alım ve Sürüm Paketleme
+
+**Tarih:** 2026-08-03
+**Kapsam:** Bekleyen refaktör değişikliklerinin commitlenmesi, sürüm dokümantasyonunun tamamlanması ve `origin/main` üzerinden Coolify otomatik dağıtımının tetiklenmesi.
+
+### 13.1 Refaktör Özeti (`refactor: clean up legacy modules and update routing persistence`)
+
+- **Backend:** Router'larda kiracı izolasyonu ve `AbortController` uyumlu istek iptali desenleri; `jwt_auth` güçlendirmesi; `badges.py` evaluation JSONB geri dönüşü; `schemas.py` grading_result normalizasyonu.
+- **Frontend:** `persistence.ts` (localStorage CRUD) kaldırıldı — tüm uygulama verisi FastAPI backend + `AuthContext` oturum sınırına taşındı. `AuthContext` oturum doğrulama (`/users/me`), `sessionNonce` remount ve kiracı değiştirme akışı güçlendirildi. Dashboard bileşenlerinde paralel fetch (`Promise.allSettled`) ve abort temizliği standartlaştırıldı. `geminiService.ts` istek iptali (`AbortSignal`) desteği eklendi.
+
+### 13.2 Sürüm Paketi
+
+| Commit | Mesaj |
+| :--- | :--- |
+| Faz 5 | `feat: add EduInsight teacher analytics dashboard and fix ts vite env types` |
+| Faz 6 | `refactor: clean up legacy modules and update routing persistence` |
+| Faz 6 (dok.) | `docs: add Faz 6 deployment notes and project documentation` |
+
+### 13.3 Dağıtım
+
+- Dal: `feature/cgai-v0.2-socratic-feedback` → `main` merge edilerek `origin/main`'e push edildi.
+- Coolify, `main` dalındaki push ile otomatik build/deploy tetikler.
+- Canlı ortam öncesi: `alembic upgrade head` (PostgreSQL Sokratik akış tabloları) ve `ALLOWED_ORIGINS` / `DATABASE_URL` / `GEMINI_API_KEY` env değişkenlerinin doğrulanması gerekir.
+
+### 13.4 Eklenen Dokümantasyon ve Test Artifaktları
+
+- `SUNUCU_BASLATMA.md` — yerel backend/frontend başlatma rehberi
+- `docs/` — MVP özellik matrisi, pedagojik iş akışı raporu, Sokratik Flow State Model, v0.2 geliştirme hedefleri
+- `test raporları/` — Faz 0 kabul testi raporu ve ekran kayıtları
+- `backend/test_ai.py` — opsiyonel AI smoke test betiği
