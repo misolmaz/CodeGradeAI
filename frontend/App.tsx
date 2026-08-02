@@ -10,6 +10,7 @@ import { TeacherDashboard } from './components/TeacherDashboard';
 import { Leaderboard } from './components/Leaderboard';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { SuperAdminHome } from './components/SuperAdminHome';
+import { EduInsight } from './components/EduInsight';
 import { LandingPage } from './components/LandingPage';
 
 import {
@@ -2084,6 +2085,7 @@ const AppContent = () => {
       {currentView === 'assignments' && renderAssignmentsView()}
       {currentView === 'assignment_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAssignmentDetailView()}
       {currentView === 'announcement_management' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAnnouncementManagementView()}
+      {currentView === 'analytics' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && <EduInsight />}
       {currentView === 'students' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentsView()}
       {currentView === 'student_analysis_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentAnalysisDetailView()}
       {currentView === 'system_panel' && user.role === UserRole.SUPERADMIN && <SuperAdminDashboard />}

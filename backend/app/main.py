@@ -8,7 +8,7 @@ from .database import engine, Base, get_db
 from sqlalchemy import text
 from . import models
 from .models import User
-from .routers import admin, auth, users, assignments, submissions, announcements, leaderboard
+from .routers import admin, auth, users, assignments, submissions, announcements, leaderboard, analytics
 from .routers.users import get_optional_current_user
 import os
 from dotenv import load_dotenv
@@ -86,6 +86,7 @@ app.include_router(assignments.router)
 app.include_router(submissions.router)
 app.include_router(announcements.router)
 app.include_router(leaderboard.router)
+app.include_router(analytics.router)
 
 
 

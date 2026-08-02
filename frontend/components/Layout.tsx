@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE_URL } from '../config';
 import { User, UserRole } from '../types';
-import { LogOut, BookOpen, BarChart2, Layout as LayoutIcon, Bell, Upload, User as UserIcon, Menu, X, Trophy, ChevronDown, Building2, Check, RotateCw } from 'lucide-react';
+import { LogOut, BookOpen, BarChart2, BrainCircuit, Layout as LayoutIcon, Bell, Upload, User as UserIcon, Menu, X, Trophy, ChevronDown, Building2, Check, RotateCw } from 'lucide-react';
 
 
 interface LayoutProps {
@@ -22,14 +22,24 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
   const [isSwitching, setIsSwitching] = useState(false);
 
   React.useEffect(() => {
-    if (token) {
-      fetch(`${API_BASE_URL}/users/me/organizations`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-        .then(res => res.json())
-        .then(data => setOrganizations(data))
-        .catch(err => console.error("Failed to fetch orgs", err));
+    if (!token) {
+      setOrganizations([]);
+      return;
     }
+
+    const controller = new AbortController();
+
+    fetch(`${API_BASE_URL}/users/me/organizations`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: controller.signal
+    })
+      .then(res => res.json())
+      .then(data => setOrganizations(data))
+      .catch(err => {
+        if (err?.name !== 'AbortError') console.error("Failed to fetch orgs", err);
+      });
+
+    return () => controller.abort();
   }, [token]);
 
   const handleSwitch = async (orgId: number) => {
@@ -115,6 +125,14 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
           )}
           {user.role === UserRole.TEACHER && (
             <>
+              <button
+                onClick={() => { setCurrentView('analytics'); setIsMobileMenuOpen(false); }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'analytics' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'
+                  }`}
+              >
+                <BrainCircuit size={20} />
+                <span className="text-sm font-medium">EduInsight</span>
+              </button>
               <button
                 onClick={() => { setCurrentView('students'); setIsMobileMenuOpen(false); }}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'students' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'

@@ -366,3 +366,65 @@ AI Analiz Raporu modalı artık tüm veriyi (puan, rubrik, hata listesi, Sokrati
 | Backend syntax | `python -m py_compile app/services.py` | ✅ Başarılı |
 | `sanitize_json` / fallback birim testi | Geçici script: fenced/unfenced JSON, kasıtlı bozuk (`Unterminated string`) girdi, fallback şema kontrolü | ✅ Tümü beklenen sonucu verdi |
 | Uçtan uca (tarayıcı) | Öğrenci girişiyle gönderim → otomatik rapor açılışı, "Kodumu Düzenle" akışı, 1. vs 2. gönderim Sokratik atlama | ✅ Doğrulandı |
+
+---
+
+## 12. Faz 5 — EduInsight Öğretmen Analitik Paneli
+
+**Tarih:** 2026-08-02
+**Kapsam:** Öğretmenin sınıf genelini tek ekrandan izleyebileceği analitik özet endpoint'i ve paneli. Yeni bir veritabanı tablosu eklenmedi; mevcut `submissions` / `evaluations` / `assignments` kayıtları okunup hesaplanıyor.
+
+### 12.1 Yeni Endpoint
+
+`GET /analytics/teacher-summary?class_code=<opsiyonel>` — `backend/app/routers/analytics.py`
+
+- Yetki: yalnızca `teacher` / `superadmin` (diğer router'larla aynı satır içi kontrol deseni).
+- Kapsam: `current_user.organization_id` ile kiracı bazında izole; `class_code` verilirse yalnızca o sınıfın öğrencileri.
+- `submissions.grading_result` (dict veya eski JSON string) ile `evaluations.grading_result_json` (Sokratik akış) her ikisi de okunup normalize ediliyor.
+
+### 12.2 Sınıf Ortalaması Hesap Mantığı
+
+- Liderlik tablosuyla (`/leaderboard/`) tutarlı olması için ortalama, öğrencinin **her ödevdeki en iyi denemesi** üzerinden hesaplanır — böylece aynı ödeve çok kez giren öğrenci ortalamayı aşağı çekmez.
+- `SUCCESS_THRESHOLD = 70` puan eşiği: bir denemenin "başarılı" sayılması için kullanılır (`success_rate`, `first_attempt_success_rate`, `attempts_to_success`).
+- **Sokratik etki metrikleri:**
+  - `average_attempts`: bir (öğrenci, ödev) çiftinin ortalama deneme sayısı.
+  - `first_attempt_success_rate`: hiç ipucu almadan ilk denemede eşiği geçenlerin oranı.
+  - `average_improvement`: yalnızca tekrar denenen ödevlerde ilk denemeden en iyi denemeye puan kazancı.
+  - Öğrenci bazında `attempts_to_success`: eşiğin ilk aşıldığı deneme sırası — "kaçıncı denemede başarılı oldu" takibi.
+
+### 12.3 Kavram Yanılgıları / Hata Dağılımı Filtresi
+
+- `errorFindings` dizisindeki her kayıt `error_type` bazında sayılır, öğrenci sayısı ve `severity` dağılımıyla birlikte raporlanır.
+- `major_error_not_detected` türü listeden **hariç tutulur** — bu değer AI'ın "anlamlı hata bulamadım" durumudur, kavram yanılgısı istatistiğinde gürültü yaratır.
+- `misconception` alanındaki dolgu değerleri (`"Yok"`, `"Belirtilmedi"`, `"-"`, boş string) örnek alıntılardan elenir; her hata türü için en fazla 3 benzersiz örnek gösterilir.
+
+### 12.4 Sokratik Destek Oranı
+
+- `socratic_support_rate`: değerlendirilen teslimler içinde `socraticFeedback` üretilmiş **ve** `direct_solution_given = false` olanların payı.
+- Bu oran, AI'ın "tam çözüm verme" yasağına (bkz. §9.2) ne ölçüde uyduğunun öğretmene gösterilen canlı göstergesidir.
+
+### 12.5 Frontend
+
+- `frontend/components/EduInsight.tsx` — üç sekmeli panel (Genel Bakış, Kavram Yanılgıları, Öğrenci Gelişimi); mevcut tasarım dili (dark-800 kartlar, CSS tabanlı çubuk grafikler) korunmuş, yeni bağımlılık eklenmemiştir.
+- `Layout.tsx` sol menüsüne öğretmen/süper admin için "EduInsight" girişi eklendi; `App.tsx`'te `analytics` view'ı olarak yönlendirildi.
+
+### 12.6 Değiştirilen / Eklenen Dosyalar
+
+- `backend/app/routers/analytics.py` — yeni router (yeni dosya)
+- `backend/app/main.py` — `analytics.router` kaydı
+- `frontend/components/EduInsight.tsx` — yeni panel bileşeni (yeni dosya)
+- `frontend/components/Layout.tsx` — "EduInsight" navigasyon girişi
+- `frontend/App.tsx` — `analytics` view routing
+- `frontend/vite-env.d.ts` — Vite istemci tip tanımları (yeni dosya; bkz. §12.7)
+
+### 12.7 TypeScript Tip Düzeltmesi (`import.meta.env`)
+
+`tsc --noEmit` daha önce `services/geminiService.ts` içinde `Property 'env' does not exist on type 'ImportMeta'` uyarısı veriyordu (proje kökünde `vite-env.d.ts` yoktu). `frontend/vite-env.d.ts` eklenerek `/// <reference types="vite/client" />` tanımı sağlandı; `tsc --noEmit` artık hatasız/uyarısız tamamlanıyor.
+
+### 12.8 Çalıştırılan Testler
+
+| Test | Komut | Sonuç |
+| :--- | :--- | :--- |
+| Backend syntax/import | `python -c "from app.routers import analytics"` | ✅ Başarılı |
+| Frontend TypeScript | `npx tsc --noEmit` | ✅ Hatasız (önceki `ImportMeta.env` uyarısı giderildi) |
+| Uçtan uca (tarayıcı) | `test.user` (teacher) girişiyle `/analytics/teacher-summary` çağrısı, sınıf filtresi, üç sekme | ✅ Doğrulandı |
