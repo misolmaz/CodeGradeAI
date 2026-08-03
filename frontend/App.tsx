@@ -61,6 +61,37 @@ const isAbortError = (error: unknown): boolean =>
 
 
 const PUBLIC_VIEWS = ['landing', 'login'];
+
+// Test 2 - Yetkisiz Erişim Yönlendirmesi: bu view'lara yalnızca belirtilen
+// rollerin erişebileceğini tanımlar. Bu SPA react-router kullanmadığından
+// (view state + query param ile yönlendirme yapılıyor), koruma hem bir
+// useEffect ile "ana sayfaya" yönlendirme hem de render sırasında geçici bir
+// "403 Yetkisiz Erişim" bileşeni olarak uygulanır (bkz. AppContent içindeki
+// yetki kontrolü effect'i ve Unauthorized403 bileşeni).
+const ROLE_RESTRICTED_VIEWS: Record<string, Array<'teacher' | 'student' | 'superadmin'>> = {
+  teacher_dashboard: ['teacher', 'superadmin'],
+  assignment_detail: ['teacher', 'superadmin'],
+  announcement_management: ['teacher', 'superadmin'],
+  analytics: ['teacher', 'superadmin'],
+  students: ['teacher', 'superadmin'],
+  student_analysis_detail: ['teacher', 'superadmin'],
+  system_panel: ['superadmin'],
+};
+
+// Rol bazlı korumalı bir view'a yetkisiz erişim denendiğinde boş sayfa (return
+// null) yerine gösterilecek belirgin uyarı bileşeni. Yönlendirme effect'i devreye
+// girene kadar (bir sonraki render) kısa süreliğine görünebilir.
+const Unauthorized403 = () => (
+  <div className="min-h-[50vh] flex flex-col items-center justify-center text-center gap-4 py-20 animate-in fade-in duration-300">
+    <div className="w-20 h-20 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
+      <LockIcon size={36} />
+    </div>
+    <h2 className="text-2xl font-black text-white">403 · Yetkisiz Erişim</h2>
+    <p className="text-slate-400 max-w-md">
+      Bu sayfayı görüntüleme yetkiniz bulunmuyor. Ana sayfaya yönlendiriliyorsunuz...
+    </p>
+  </div>
+);
 const DEFAULT_ASSIGNMENT_FORM: Partial<Assignment> = {
   title: '',
   description: '',
@@ -436,6 +467,50 @@ const AppContent = () => {
     }
   }, [currentView]);
 
+  // Test 1 - Editör State Temizliği (güvenlik ağı): kod gönderim modalı HANGİ
+  // yoldan kapatılırsa kapatılsın (İptal, X butonu, view değişimi, gelecekte
+  // eklenecek başka bir kapama yolu) codeDraft'ın kesinlikle boşaldığından emin
+  // olur. Var olan closeCodeModal()/leave-view efekti zaten bunu yapıyor; bu
+  // effect, isModalOpen'a bağlı olduğundan onlardan bağımsız ikinci bir
+  // güvenlik katmanı sağlar.
+  useEffect(() => {
+    if (!isModalOpen) {
+      setCodeDraft('');
+    }
+  }, [isModalOpen]);
+
+  // Kullanıcı oturumu değiştiğinde (logout / token'ın düşmesi) editördeki
+  // yarım kodun ekranda kalmaması için ek güvenlik: AuthContext zaten
+  // sessionNonce ile tüm AppContent'i remount ettiriyor (bkz. AppRoot), ama bu
+  // effect token'ın herhangi bir sebeple boşalması durumunda da anında
+  // temizlik yaparak tek bir mekanizmaya bağımlı kalınmamasını sağlar.
+  useEffect(() => {
+    if (!token) {
+      setCodeDraft('');
+      setIsModalOpen(false);
+    }
+  }, [token]);
+
+  // Test 2 - Yetkisiz Erişim Yönlendirmesi: rol bazlı korumalı bir view'a
+  // (örn. bir öğrencinin URL/state üzerinden 'analytics'e) girilmeye
+  // çalışılırsa boş sayfa bırakmak yerine ana sayfaya (home) geri yönlendirir
+  // ve kullanıcıyı bilgilendiren bir toast gösterir. Bu effect tüm diğer
+  // hook'larla birlikte, herhangi bir erken return'den ÖNCE tanımlanmalı
+  // (Rules of Hooks) — bu yüzden `role` (ham string) üzerinden çalışır.
+  useEffect(() => {
+    if (!role) return;
+    const allowedRoles = ROLE_RESTRICTED_VIEWS[currentView];
+    if (allowedRoles && !allowedRoles.includes(role)) {
+      setCurrentView('home');
+      setToast({
+        title: '403 · Yetkisiz Erişim',
+        msg: 'Bu sayfayı görüntüleme yetkiniz yok. Ana sayfaya yönlendirildiniz.',
+        visible: true
+      });
+      setTimeout(() => setToast(null), 6000);
+    }
+  }, [currentView, role]);
+
   useEffect(() => {
     if (avatarUrl) setProfileNewAvatar(avatarUrl);
     else if (studentNumber) setProfileNewAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + studentNumber);
@@ -679,6 +754,21 @@ const AppContent = () => {
 
     const studentSubs = submissions.filter(s => s.studentId === user.id);
 
+    // Test 3 - Pedagojik Deneme Gruplaması: aynı ödeve yapılan birden fazla
+    // deneme (submission) burada ayrı ayrı satırlar olarak listelenmez —
+    // her assignment_id için yalnızca EN SON deneme gösterilir, toplam deneme
+    // sayısı ise küçük bir rozetle belirtilir. Detaya girildiğinde (modal)
+    // tüm denemeler "1. Deneme / 2. Deneme..." şeklinde ayrı ayrı incelenebilir.
+    const latestSubmissionByAssignment = new Map<string, Submission>();
+    for (const sub of studentSubs) {
+      const existing = latestSubmissionByAssignment.get(sub.assignmentId);
+      if (!existing || new Date(sub.submittedAt).getTime() > new Date(existing.submittedAt).getTime()) {
+        latestSubmissionByAssignment.set(sub.assignmentId, sub);
+      }
+    }
+    const groupedStudentSubs = Array.from(latestSubmissionByAssignment.values())
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+
     const averageScore = studentSubs.length > 0
       ? Math.round(studentSubs.reduce((acc, curr) => acc + (curr.gradingResult?.grade || 0), 0) / studentSubs.length)
       : 0;
@@ -735,16 +825,24 @@ const AppContent = () => {
               </h3>
             </div>
             <div className="divide-y divide-dark-700/50">
-              {studentSubs.slice(0, 5).map(sub => {
+              {groupedStudentSubs.slice(0, 5).map(sub => {
                 const assignment = assignments.find(a => a.id === sub.assignmentId);
+                const attemptCount = studentSubs.filter(s => s.assignmentId === sub.assignmentId).length;
                 return (
-                  <div key={sub.id} className="p-5 hover:bg-dark-700/20 transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 group">
+                  <div key={sub.assignmentId} className="p-5 hover:bg-dark-700/20 transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 group">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center text-primary group-hover:scale-110 transition-transform flex-shrink-0">
                         <FileCode size={20} />
                       </div>
                       <div>
-                        <h4 className="text-white font-medium line-clamp-1">{assignment?.title || 'Ödev'}</h4>
+                        <h4 className="text-white font-medium line-clamp-1 flex items-center gap-2">
+                          {assignment?.title || 'Ödev'}
+                          {attemptCount > 1 && (
+                            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-wider whitespace-nowrap">
+                              {attemptCount}. Deneme
+                            </span>
+                          )}
+                        </h4>
                         <p className="text-slate-500 text-xs">{new Date(sub.submittedAt).toLocaleDateString()} tarihinde gönderildi</p>
                       </div>
                     </div>
@@ -839,10 +937,17 @@ const AppContent = () => {
             </div>
           )}
           {!(isDataLoading && assignments.length === 0) && filteredAssignments.map(assignment => {
-            const studentSubmission = user.role === UserRole.STUDENT
-              ? submissions.find(s => s.assignmentId === assignment.id && s.studentId === user.id)
-
-              : null;
+            // Test 3 - Pedagojik Deneme Gruplaması: bir öğrencinin aynı ödeve
+            // yaptığı birden fazla deneme burada tek bir karta indirgenir; kart
+            // en SON denemeyi temsil eder ("Sonucu İncele" tıklandığında modal
+            // içindeki deneme sekmeleri üzerinden diğer denemelere geçilebilir).
+            const studentAttempts = user.role === UserRole.STUDENT
+              ? submissions
+                .filter(s => s.assignmentId === assignment.id && s.studentId === user.id)
+                .sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime())
+              : [];
+            const studentSubmission = studentAttempts.length > 0 ? studentAttempts[studentAttempts.length - 1] : null;
+            const studentAttemptCount = studentAttempts.length;
             const subCount = submissions.filter(s => s.assignmentId === assignment.id).length;
 
             return (
@@ -937,6 +1042,11 @@ const AppContent = () => {
                             <span className="px-3 sm:px-4 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg text-[10px] sm:text-xs font-black border border-emerald-500/20 shadow-sm flex items-center gap-2">
                               <CheckCircle2 size={14} /> TAMAMLANDI
                             </span>
+                            {studentAttemptCount > 1 && (
+                              <span className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-[10px] sm:text-xs font-black border border-primary/20 shadow-sm whitespace-nowrap">
+                                {studentAttemptCount}. Deneme
+                              </span>
+                            )}
                             <button
                               onClick={() => setSelectedSubmission(studentSubmission)}
                               className="bg-dark-700 hover:bg-dark-600 text-white px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all border border-dark-600 whitespace-nowrap">
@@ -1322,11 +1432,21 @@ const AppContent = () => {
     // tekrar tekrar denemeye teşvik etmemek için "Kodumu Düzenle" butonu
     // footer'dan tamamen kaldırılır (yalnızca "Kapat" kalır).
     const isSuccessful = (gradingResult.grade ?? 0) >= 90;
-    const isMaxRetriesReached = submissions.filter(
-      s =>
-        s.assignmentId === selectedSubmission.assignmentId &&
-        s.studentId === selectedSubmission.studentId
-    ).length >= 2;
+
+    // Test 3 - Pedagojik Deneme Gruplaması: aynı ödev + aynı öğrenciye ait tüm
+    // denemeler kronolojik sırayla çıkarılır. Bu liste hem "Kaçıncı deneme"
+    // etiketlerini hem de modal üstündeki deneme sekmelerini besler. Her sekme
+    // KENDİ submission kaydının (dolayısıyla kendi Sokratik geri bildiriminin)
+    // üzerinden render edildiği için denemeler arasında geri bildirim karışmaz.
+    const attemptSiblings = submissions
+      .filter(
+        s =>
+          s.assignmentId === selectedSubmission.assignmentId &&
+          s.studentId === selectedSubmission.studentId
+      )
+      .sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+    const currentAttemptIndex = attemptSiblings.findIndex(s => s.id === selectedSubmission.id);
+    const isMaxRetriesReached = attemptSiblings.length >= 2;
     const hideEditCodeButton = isSuccessful || isMaxRetriesReached;
 
     const handleEditCode = () => {
@@ -1355,6 +1475,30 @@ const AppContent = () => {
               className="absolute top-6 right-6 p-3 bg-dark-700/50 hover:bg-dark-600 rounded-full text-slate-400 hover:text-white z-10 transition-all active:scale-95 shadow-lg border border-dark-600">
               <X size={24} />
             </button>
+
+            {/* Test 3 - Deneme Sekmeleri: aynı ödeve birden fazla teslim varsa,
+                bunlar "1. Deneme", "2. Deneme"... şeklinde ayrı sekmeler olarak
+                gösterilir. Her sekme yalnızca KENDİ denemesinin puanını ve
+                Sokratik geri bildirimini gösterir. */}
+            {attemptSiblings.length > 1 && (
+              <div className="pt-6 px-6 sm:px-10 pr-20 flex flex-wrap gap-2 shrink-0">
+                {attemptSiblings.map((attempt, idx) => (
+                  <button
+                    key={attempt.id}
+                    onClick={() => setSelectedSubmission(attempt)}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border transition-all ${attempt.id === selectedSubmission.id
+                      ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                      : 'bg-dark-700/50 text-slate-400 border-dark-600 hover:bg-dark-700 hover:text-white'
+                      }`}
+                  >
+                    {idx + 1}. Deneme
+                    <span className="ml-2 opacity-70 font-bold normal-case tracking-normal">
+                      ({attempt.gradingResult?.grade ?? 0})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {isGated && effectiveLevel < 3 ? (
               /* --- Sokratik Kapı: Seviye 0 (Farkındalık) / 1 (+Yönlendirme) / 2 (+İpucu) --- */
@@ -1429,6 +1573,14 @@ const AppContent = () => {
                     <h4 className="text-slate-500 text-[10px] uppercase font-black mb-1 opacity-50 tracking-widest">İşlem Zamanı</h4>
                     <p className="text-white font-bold text-xs">{new Date(selectedSubmission.submittedAt).toLocaleString()}</p>
                   </div>
+                  {attemptSiblings.length > 1 && (
+                    <div className="bg-dark-800/80 p-5 rounded-2xl border border-dark-700 shadow-sm">
+                      <h4 className="text-slate-500 text-[10px] uppercase font-black mb-1 opacity-50 tracking-widest">Deneme</h4>
+                      <p className="text-white font-bold text-xs">
+                        {currentAttemptIndex + 1}. Deneme / {attemptSiblings.length} Toplam
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2081,14 +2233,28 @@ const AppContent = () => {
   return (
     <Layout user={user} onLogout={handleLogout} currentView={currentView} setCurrentView={setCurrentView}>
       {currentView === 'home' && renderHomeView()}
-      {currentView === 'teacher_dashboard' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && <TeacherDashboard />}
+      {currentView === 'teacher_dashboard' && (
+        (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) ? <TeacherDashboard /> : <Unauthorized403 />
+      )}
       {currentView === 'assignments' && renderAssignmentsView()}
-      {currentView === 'assignment_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAssignmentDetailView()}
-      {currentView === 'announcement_management' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderAnnouncementManagementView()}
-      {currentView === 'analytics' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && <EduInsight />}
-      {currentView === 'students' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentsView()}
-      {currentView === 'student_analysis_detail' && (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) && renderStudentAnalysisDetailView()}
-      {currentView === 'system_panel' && user.role === UserRole.SUPERADMIN && <SuperAdminDashboard />}
+      {currentView === 'assignment_detail' && (
+        (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) ? renderAssignmentDetailView() : <Unauthorized403 />
+      )}
+      {currentView === 'announcement_management' && (
+        (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) ? renderAnnouncementManagementView() : <Unauthorized403 />
+      )}
+      {currentView === 'analytics' && (
+        (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) ? <EduInsight /> : <Unauthorized403 />
+      )}
+      {currentView === 'students' && (
+        (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) ? renderStudentsView() : <Unauthorized403 />
+      )}
+      {currentView === 'student_analysis_detail' && (
+        (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) ? renderStudentAnalysisDetailView() : <Unauthorized403 />
+      )}
+      {currentView === 'system_panel' && (
+        user.role === UserRole.SUPERADMIN ? <SuperAdminDashboard /> : <Unauthorized403 />
+      )}
       {currentView === 'profile' && renderProfileView()}
       {currentView === 'leaderboard' && <Leaderboard />}
       {selectedSubmission && renderSubmissionDetailModal()}

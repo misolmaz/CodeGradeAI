@@ -461,3 +461,56 @@ AI Analiz Raporu modalı artık tüm veriyi (puan, rubrik, hata listesi, Sokrati
 - `docs/` — MVP özellik matrisi, pedagojik iş akışı raporu, Sokratik Flow State Model, v0.2 geliştirme hedefleri
 - `test raporları/` — Faz 0 kabul testi raporu ve ekran kayıtları
 - `backend/test_ai.py` — opsiyonel AI smoke test betiği
+
+---
+
+## 14. Faz 7 — Kapanış Öncesi Kritik UX ve Pedagojik Mantık Düzeltmeleri
+
+**Tarih:** 2026-08-03
+**Kapsam:** v0.2.0-research sürümünün uzman değerlendirmesi öncesi manuel testlerde (Test 1–3) tespit edilen dört kritik hatanın giderilmesi. Yalnızca `frontend/App.tsx`, `frontend/utils/parseGradingResult.ts` ve `backend/app/services.py` değiştirildi; veritabanı modeli/migrasyon değişmedi.
+
+### 14.1 Editör State Temizliği (Test 1)
+
+Önceki kullanıcının/denemenin kod editöründe kalıntı bırakmaması için mevcut kapatma yollarına (`closeCodeModal`, view-değişim `useEffect`'i) ek olarak iki bağımsız güvenlik ağı eklendi:
+
+- `isModalOpen === false` olduğunda `codeDraft` her koşulda sıfırlanır — modal hangi yoldan kapatılırsa kapatılsın (gelecekte eklenecek yeni bir kapama noktası dahil) kalıntı kalmaz.
+- `token` düşerse (logout / oturum sonu) `codeDraft` ve `isModalOpen` anında temizlenir; bu, `AuthContext`'in `sessionNonce` ile tüm `AppContent`'i remount ettirmesinden (§13.2) bağımsız ikinci bir katmandır.
+
+### 14.2 Yetkisiz Erişim Yönlendirmesi (Test 2)
+
+Bu SPA `react-router` kullanmadığından (view state + query param tabanlı yönlendirme), rol bazlı korumalı bir view'a (örn. öğrencinin `analytics`'e) girilmeye çalışılması önceden `return null` ile boş ekrana düşüyordu. Düzeltme:
+
+- `ROLE_RESTRICTED_VIEWS` haritası (`teacher_dashboard`, `assignment_detail`, `announcement_management`, `analytics`, `students`, `student_analysis_detail` → `teacher`/`superadmin`; `system_panel` → yalnızca `superadmin`).
+- Tüm hook'lardan sonra ama **herhangi bir erken `return`'den önce** tanımlı bir `useEffect` (Rules of Hooks), yetkisiz bir view tespit ettiğinde otomatik olarak `home`'a yönlendirir ve "403 · Yetkisiz Erişim" toast'ı gösterir.
+- Redirect effect'i devreye girene kadarki tek render karesi için de boş ekran kalmaması adına, ana render bloğunda `return null` yerine yeni `Unauthorized403` bileşeni gösterilir.
+
+### 14.3 Dirençli JSON Parse Edici
+
+AI'dan (veya eski/bozuk kayıtlardan) gelen JSON'ın markdown code fence (` ```json ... ``` `) veya trailing comma (`..., }` / `..., ]`) içermesi durumunda sistemin çökmemesi güçlendirildi:
+
+- **Backend** (`backend/app/services.py` → `sanitize_json`): mevcut fence temizliğine trailing comma toleransı eklendi (`re.sub(r",(\s*[}\]])", r"\1", cleaned)`). `grade_submission` içindeki katmanlı `try/except` (§11.4) zaten hem `JSONDecodeError` hem şema doğrulama hatasını `_fallback_grading_result` ile karşılıyordu; bu değişiklik fallback'e düşme ihtimalini daha da azaltır.
+- **Frontend** (`frontend/utils/parseGradingResult.ts`): yeni `sanitizeJsonString` yardımcı fonksiyonu (fence + trailing comma temizliği) eklendi. `JSON.parse` ilk denemede başarısız olursa temizlenmiş metinle ikinci kez denenir; o da başarısız olursa dış `try/catch` `null` döner — hiçbir girdi için istisna kullanıcıya sızmaz.
+
+### 14.4 Pedagojik Deneme Gruplaması (Test 3)
+
+Öğrenci ekranında aynı ödeve yapılan birden fazla deneme artık ayrı ayrı "ödevmiş gibi" listelenmiyor; `assignment_id` bazında gruplanıyor:
+
+- **Ana Sayfa** ("Ödev Teslim Geçmişim"): `studentSubs` artık `assignment_id` başına yalnızca **en son deneme** ile temsil ediliyor (`latestSubmissionByAssignment` Map'i); birden fazla denemede başlığın yanına "N. Deneme" rozeti ekleniyor.
+- **Ödevler görünümü** (öğrenci kartı): `studentSubmission` artık o ödeve ait denemelerin **en sonuncusu**; "TAMAMLANDI" rozetinin yanına deneme sayacı rozeti eklendi.
+- **Teslim Detay Modalı:** birden fazla deneme varsa üstte kronolojik "1. Deneme (puan) / 2. Deneme (puan)…" sekmeleri render edilir (`attemptSiblings`, `submittedAt`'e göre artan sıralı). Her sekme yalnızca **kendi** `submission` kaydını (dolayısıyla kendi Sokratik geri bildirimini) gösterir — denemeler arası geri bildirim karışması engellenir. Yan panelde "X. Deneme / Y Toplam" bilgisi eklendi.
+- Öğretmenin "Ödev Detayı" tablosu (`renderAssignmentDetailView`) bilinçli olarak **değiştirilmedi**: öğretmen her denemeyi ayrı satırda görüp not/silme işlemi yapabilmelidir.
+
+### 14.5 Değiştirilen Dosyalar
+
+- `frontend/App.tsx` — editör state güvenlik ağları, `ROLE_RESTRICTED_VIEWS` + yönlendirme `useEffect`'i + `Unauthorized403` bileşeni, ana sayfa/ödevler görünümü deneme gruplaması, teslim detay modalına deneme sekmeleri
+- `frontend/utils/parseGradingResult.ts` — `sanitizeJsonString` + iki aşamalı (`JSON.parse` → sanitize → tekrar `JSON.parse`) dirençli ayrıştırma zinciri
+- `backend/app/services.py` — `sanitize_json` içine trailing comma toleransı
+
+### 14.6 Çalıştırılan Testler
+
+| Test | Komut / Yöntem | Sonuç |
+| :--- | :--- | :--- |
+| Frontend TypeScript | `npx tsc --noEmit` | ✅ Hatasız |
+| Backend syntax | `python -m py_compile app/services.py` | ✅ Başarılı |
+| `sanitize_json` birim testi | Geçici script: markdown fence + trailing comma içeren bozuk JSON | ✅ Temizlenip başarıyla `json.loads` edildi |
+| Linter | `ReadLints` (App.tsx, parseGradingResult.ts, services.py) | ✅ Hata yok |

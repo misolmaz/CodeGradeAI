@@ -11,6 +11,32 @@ import {
   PedagogicalMetadata,
 } from '../types';
 
+/**
+ * AI/legacy kayıtlardan gelebilecek bozuk JSON metnini (markdown code fence,
+ * ```json ... ``` sarmalayıcıları, açıklama satırlarıyla çevrili JSON, veya
+ * kapanıştan hemen önce fazladan virgül — trailing comma) ayrıştırmadan önce
+ * güvenle temizler. `JSON.parse` başarısız olduğunda ikinci bir deneme olarak
+ * kullanılır; sistemin bozuk JSON karşısında çökmemesini garanti eden
+ * dirençli parse zincirinin bir parçasıdır (bkz. parseGradingResult).
+ */
+function sanitizeJsonString(raw: string): string {
+  let cleaned = raw.trim();
+
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenceMatch) cleaned = fenceMatch[1].trim();
+
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+
+  // Trailing comma toleransı: `..., }` / `..., ]` standart JSON'da geçersizdir.
+  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+
+  return cleaned.trim();
+}
+
 const VALID_ERROR_TYPES: ReadonlySet<string> = new Set([
   'syntax_error',
   'runtime_error',
@@ -152,10 +178,25 @@ function parsePedagogicalMetadata(raw: unknown): PedagogicalMetadata | undefined
 /**
  * Safely parses grading_result JSON from the database.
  * Preserves legacy records: missing v0.2 fields are omitted; required MVP fields get safe defaults.
+ *
+ * Dirençli parse zinciri: string girdi doğrudan JSON.parse ile ayrıştırılamazsa
+ * (markdown code fence, trailing comma vb. kirlilik), `sanitizeJsonString` ile
+ * temizlenip ikinci kez denenir. İkisi de başarısız olursa (veya girdi zaten
+ * geçersizse) hata fırlatmadan `null` döner — çağıran taraf bunu güvenle
+ * "sonuç yok" olarak ele alır; sistem hiçbir koşulda çökmez.
  */
 export function parseGradingResult(raw: string | unknown): GradingResult | null {
   try {
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    let parsed: unknown;
+    if (typeof raw === 'string') {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = JSON.parse(sanitizeJsonString(raw));
+      }
+    } else {
+      parsed = raw;
+    }
     if (!parsed || typeof parsed !== 'object') return null;
 
     const data = parsed as Record<string, unknown>;

@@ -420,7 +420,10 @@ def sanitize_json(raw_text: str) -> str:
     """
     Gemini yanıtı response_mime_type=application/json istenmiş olsa da bazen
     ```json ... ``` markdown code fence'i içinde veya öncesinde/sonrasında
-    ekstra metinle dönebilir. json.loads'tan önce bu artıkları temizler.
+    ekstra metinle, ya da nesne/dizi kapanışından hemen önce fazladan bir
+    virgülle (trailing comma) dönebilir. json.loads'tan önce bu artıkları
+    güvenle temizler; hiçbir durumda exception fırlatmaz (temizlenemeyen
+    girdi olduğu gibi döner, çağıran taraf json.loads hatasını zaten yakalar).
     """
     if not raw_text:
         return raw_text
@@ -438,6 +441,10 @@ def sanitize_json(raw_text: str) -> str:
     last_brace = cleaned.rfind("}")
     if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
         cleaned = cleaned[first_brace:last_brace + 1]
+
+    # Trailing comma toleransı: `..., }` veya `..., ]` standart JSON'da geçersizdir
+    # ama bazı model yanıtlarında görülebilir — ayrıştırmadan önce güvenle kaldırılır.
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
 
     return cleaned.strip()
 
