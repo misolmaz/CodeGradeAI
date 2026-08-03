@@ -514,3 +514,35 @@ AI'dan (veya eski/bozuk kayıtlardan) gelen JSON'ın markdown code fence (` ```j
 | Backend syntax | `python -m py_compile app/services.py` | ✅ Başarılı |
 | `sanitize_json` birim testi | Geçici script: markdown fence + trailing comma içeren bozuk JSON | ✅ Temizlenip başarıyla `json.loads` edildi |
 | Linter | `ReadLints` (App.tsx, parseGradingResult.ts, services.py) | ✅ Hata yok |
+
+---
+
+## 15. Faz 8 — F5 Kalıcılık Güvenliği ve Öğretmen Öğrenci Detayı Gruplaması
+
+**Tarih:** 2026-08-04
+**Kapsam:** Sayfa yenileme (F5) sonrası detay view'larının boş ekrana düşmesinin giderilmesi ve öğretmenin öğrenci detay ekranındaki (`student_analysis_detail`) ödev listesinin deneme bazında gruplanması. Yalnızca `frontend/App.tsx` değiştirildi.
+
+### 15.1 F5 / Boş Ekran Koruması (Fallback Redirect)
+
+- **Problem:** `currentView` sayfa yenilendiğinde URL query param'ından (`?view=...`) geri yükleniyor, ancak `selectedAssignment` / `selectedStudent` sadece bellek içi React state olduğundan F5'te sıfırlanıyordu. Sonuç: `renderStudentAnalysisDetailView` `return null` (siyah ekran), `renderAssignmentDetailView` ise "Ödev bulunamadı" mesajıyla çıkışsız kalıyordu.
+- **Çözüm:** §14.2'deki (`ROLE_RESTRICTED_VIEWS`) yönlendirme deseniyle aynı yaklaşımla yeni bir `useEffect` eklendi: `currentView === 'assignment_detail' && !selectedAssignment` → `setCurrentView('assignments')`; `currentView === 'student_analysis_detail' && !selectedStudent` → `setCurrentView('students')`.
+- Normal tıklama akışında (`setSelectedX` + `setCurrentView` aynı event handler içinde art arda çağrıldığında) React bu state güncellemelerini aynı render'da birleştirdiğinden yanlış pozitif tetiklenmiyor; efekt yalnızca F5/deep-link senaryosunda devreye giriyor.
+- **Kapsam notu:** Bu, eksik state'i URL'den yeniden inşa eden bir "deep-link restore" mekanizması değildir; kullanıcıyı güvenli bir liste görünümüne geri döndüren bilinçli olarak sınırlı bir "fallback"tır.
+
+### 15.2 Öğretmen → Öğrenci Detayı Ödev Gruplaması
+
+- **Problem:** `renderStudentAnalysisDetailView` (öğretmenin bir öğrencinin tüm geçmişini gördüğü ekran) "YAPILAN ÖDEVLER" listesini ham `studentSubs` üzerinden render ediyordu; aynı ödeve yapılan her deneme ayrı bir satır olarak görünüyordu.
+- **Çözüm:** §14.4'te öğrenci tarafı için tanımlanan `latestSubmissionByAssignment` Map deseni bu ekrana da uygulandı — her `assignment_id` için yalnızca en güncel teslim gösteriliyor, birden fazla deneme varsa başlığın yanına `{attemptCount}. Deneme` rozeti ekleniyor.
+- "DETAYI GÖR" tıklandığında açılan `renderSubmissionDetailModal`, `assignmentId + studentId` eşleşmesine göre kendi `attemptSiblings` listesini bağımsız hesapladığından, mevcut "1. Deneme / 2. Deneme…" sekmeli yapı hiçbir değişiklik gerektirmeden çalışmaya devam ediyor.
+- **§14.4 netleştirmesi:** Öğretmenin *ödev bazlı* detay tablosu (`renderAssignmentDetailView` — bir ödeve tüm öğrencilerin verdiği yanıtlar) bilinçli olarak gruplanmamış kalmaya devam ediyor; öğretmen orada her denemeyi ayrı satırda görüp not/silme işlemi yapabilmelidir. Bu fazda gruplanan ekran, *öğrenci bazlı* detay görünümüdür (`renderStudentAnalysisDetailView` — bir öğrencinin tüm ödevleri).
+
+### 15.3 Değiştirilen Dosyalar
+
+- `frontend/App.tsx` — F5 fallback redirect `useEffect`'i, `renderStudentAnalysisDetailView` deneme gruplaması (`latestSubmissionByAssignment` + `{attemptCount}. Deneme` rozeti)
+
+### 15.4 Çalıştırılan Testler
+
+| Test | Komut | Sonuç |
+| :--- | :--- | :--- |
+| Frontend TypeScript | `npx tsc --noEmit` | ✅ Hatasız |
+| Linter | `ReadLints` (App.tsx) | ✅ Hata yok |

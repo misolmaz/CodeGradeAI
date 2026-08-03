@@ -511,6 +511,24 @@ const AppContent = () => {
     }
   }, [currentView, role]);
 
+  // F5 / Boş Ekran Koruması (Fallback Redirect): `currentView` sayfa
+  // yenilendiğinde (F5) URL query param'ından geri yüklenir, ancak
+  // `selectedAssignment` / `selectedStudent` gibi seçili öğe state'leri sadece
+  // bellek içi React state olduğundan sıfırlanır. Bu durumda ilgili detay
+  // görünümü (assignment_detail, student_analysis_detail) boş/anlamsız bir
+  // ekran (return null veya "bulunamadı" mesajı) göstermek yerine kullanıcı
+  // derhal ait olduğu ana liste görünümüne yönlendirilir. Normal tıklama
+  // akışında (örn. setSelectedAssignment + setCurrentView aynı event
+  // handler'da çağrıldığında) React bu state güncellemelerini aynı render'da
+  // birleştirdiğinden yanlış pozitif bir yönlendirme tetiklenmez.
+  useEffect(() => {
+    if (currentView === 'assignment_detail' && !selectedAssignment) {
+      setCurrentView('assignments');
+    } else if (currentView === 'student_analysis_detail' && !selectedStudent) {
+      setCurrentView('students');
+    }
+  }, [currentView, selectedAssignment, selectedStudent]);
+
   useEffect(() => {
     if (avatarUrl) setProfileNewAvatar(avatarUrl);
     else if (studentNumber) setProfileNewAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + studentNumber);
@@ -1853,6 +1871,23 @@ const AppContent = () => {
     if (!selectedStudent) return null;
     const studentSubs = submissions.filter(s => s.studentId === selectedStudent.id.toString());
 
+    // Test 3 - Pedagojik Deneme Gruplaması (Öğretmen Ekranı): renderHomeView'daki
+    // öğrenci tarafı gruplama mantığının aynısı — bir öğrencinin aynı ödeve
+    // yaptığı birden fazla deneme burada ayrı satırlar olarak listelenmez; her
+    // assignment_id için yalnızca EN SON (en güncel) teslim gösterilir, toplam
+    // deneme sayısı ise kart üzerinde bir rozetle belirtilir. "DETAYI GÖR"
+    // tıklandığında açılan modal (renderSubmissionDetailModal), assignmentId +
+    // studentId eşleşmesine göre kendi `attemptSiblings`'ini zaten hesapladığı
+    // için var olan "1. Deneme / 2. Deneme..." sekmeli yapı değişmeden çalışır.
+    const latestSubmissionByAssignment = new Map<string, Submission>();
+    for (const sub of studentSubs) {
+      const existing = latestSubmissionByAssignment.get(sub.assignmentId);
+      if (!existing || new Date(sub.submittedAt).getTime() > new Date(existing.submittedAt).getTime()) {
+        latestSubmissionByAssignment.set(sub.assignmentId, sub);
+      }
+    }
+    const groupedStudentSubs = Array.from(latestSubmissionByAssignment.values())
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
 
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
@@ -1882,16 +1917,24 @@ const AppContent = () => {
         </h3>
 
         <div className="grid gap-4">
-          {studentSubs.map(sub => {
+          {groupedStudentSubs.map(sub => {
             const assignment = assignments.find(a => a.id === sub.assignmentId);
+            const attemptCount = studentSubs.filter(s => s.assignmentId === sub.assignmentId).length;
             return (
-              <div key={sub.id} className="bg-dark-800 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all group flex justify-between items-center shadow-lg">
+              <div key={sub.assignmentId} className="bg-dark-800 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all group flex justify-between items-center shadow-lg">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-lg bg-dark-700 flex items-center justify-center text-primary border border-dark-600 group-hover:scale-110 transition-transform">
                     <FileCode size={24} />
                   </div>
                   <div>
-                    <h4 className="text-lg font-bold text-white group-hover:text-primary transition-colors">{assignment?.title || 'Bilinmeyen Ödev'}</h4>
+                    <h4 className="text-lg font-bold text-white group-hover:text-primary transition-colors flex items-center gap-2">
+                      {assignment?.title || 'Bilinmeyen Ödev'}
+                      {attemptCount > 1 && (
+                        <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-wider whitespace-nowrap">
+                          {attemptCount}. Deneme
+                        </span>
+                      )}
+                    </h4>
                     <p className="text-slate-500 text-xs mt-1">{new Date(sub.submittedAt).toLocaleDateString()} tarihinde teslim edildi</p>
                   </div>
                 </div>
