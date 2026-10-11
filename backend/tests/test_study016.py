@@ -319,3 +319,66 @@ def test_teacher_removal_keeps_research_data_and_restores_attempt():
         InteractionEvent.event_type == "submission_removed_by_teacher",
     ).count() == 1
     db.close()
+
+
+def _events(sub_id, event_type):
+    db = SessionLocal()
+    sub = db.query(Submission).filter(Submission.id == sub_id).one()
+    rows = db.query(InteractionEvent).filter(
+        InteractionEvent.session_id == sub.session_id, InteractionEvent.event_type == event_type
+    ).all()
+    out = [dict(r.metadata_json) for r in rows]
+    db.close()
+    return out
+
+
+def test_fidelity_log_scaffold_levels_for_experiment():
+    ids, aid = _setup()
+    h = _login(ids["exp"][1])
+    sid = _grade(h, aid).json()["submissionId"]
+
+    r = client.post("/api/interaction", headers=h, json={"submissionId": sid, "event": "result_viewed", "uiLevel": 0})
+    assert r.status_code == 204
+    for a, b in [(0, 1), (1, 2), (2, 3)]:
+        r = client.post("/api/interaction", headers=h, json={
+            "submissionId": sid, "event": "scaffold_advanced", "fromLevel": a, "toLevel": b})
+        assert r.status_code == 204, r.text
+
+    assert _events(sid, "result_viewed")[0]["ui_level"] == 0
+    assert [e["to_level"] for e in _events(sid, "scaffold_advanced")] == [1, 2, 3]
+    unlocked = _events(sid, "full_report_unlocked")
+    assert len(unlocked) == 1 and unlocked[0]["unlock_reason"] == "student_request"
+
+    db = SessionLocal()
+    sub = db.query(Submission).filter(Submission.id == sid).one()
+    assert sub.study_session.full_report_unlocked_at is not None
+    assert sub.study_session.session_status == "FULL_REPORT_UNLOCKED"
+    db.close()
+
+    # Oturum aktif kalır: ikinci teslim aynı oturumda 2. deneme olur
+    assert _grade(h, aid).json()["attemptNo"] == 2
+
+
+def test_fidelity_log_rules():
+    ids, aid = _setup()
+    hc = _login(ids["ctrl"][1])
+    sid_c = _grade(hc, aid).json()["submissionId"]
+    # Kontrol: görüntüleme loglanır, kademe yoktur
+    assert client.post("/api/interaction", headers=hc, json={
+        "submissionId": sid_c, "event": "result_viewed"}).status_code == 204
+    assert _events(sid_c, "result_viewed")[0]["feedback_mode"] == "grade_only"
+    assert client.post("/api/interaction", headers=hc, json={
+        "submissionId": sid_c, "event": "scaffold_advanced", "fromLevel": 0, "toLevel": 1}).status_code == 400
+
+    he = _login(ids["exp"][1])
+    sid_e = _grade(he, aid).json()["submissionId"]
+    # Başkasının teslimi
+    assert client.post("/api/interaction", headers=hc, json={
+        "submissionId": sid_e, "event": "result_viewed"}).status_code == 404
+    # Atlamalı geçiş reddedilir
+    assert client.post("/api/interaction", headers=he, json={
+        "submissionId": sid_e, "event": "scaffold_advanced", "fromLevel": 0, "toLevel": 3}).status_code == 422
+    # Öğretmen etkileşimi loglanmaz
+    ht = _login(ids["teacher"][1])
+    assert client.post("/api/interaction", headers=ht, json={
+        "submissionId": sid_e, "event": "result_viewed"}).status_code == 403

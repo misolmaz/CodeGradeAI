@@ -6,14 +6,14 @@ Notu istemcinin bildirdiği eski iki adımlı akış (POST /submissions/) kapat�
 """
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from ..badges import check_badges
 from ..database import get_db
 from ..models import Assignment, Submission, User
-from ..schemas import Badge, GradeResponse, SubmissionRequest
-from ..services import grade_submission_with_persistence
+from ..schemas import Badge, GradeResponse, InteractionLogRequest, SubmissionRequest
+from ..services import _log_interaction_event, _utcnow, grade_submission_with_persistence
 from ..study_config import (
     SUBMISSION_SOURCE_AI_ERROR,
     feedback_mode_for,
@@ -149,3 +149,70 @@ async def grade_code(
         )
     payload["newBadges"] = new_badges
     return GradeResponse(**payload)
+
+
+# Arayüz kademeleri (App.tsx scaffoldingLevel): 0 farkındalık sorusu, 1 + yönlendirici soru,
+# 2 + ipucu ve sonraki adım, 3 tam rapor.
+UI_LEVEL_NAMES = {0: "awareness_question", 1: "guiding_question", 2: "hint_next_action", 3: "full_report"}
+
+
+@router.post("/api/interaction", status_code=204)
+async def log_interaction(
+    payload: InteractionLogRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Uygulama sadakati logu (YAYIN 016). Yalnızca öğrencinin kendi araştırma teslimleri için.
+
+    result_viewed: sonuç ekranı açıldı (iki koşulda da). scaffold_advanced: deney koşulunda
+    öğrenci bir sonraki ipucu kademesine geçti; kademe 3'e geçiş tam raporun öğrenci isteğiyle
+    açılması demektir (full_report_unlocked olayı ve study_sessions.full_report_unlocked_at).
+    """
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Yalnızca öğrenci etkileşimleri loglanır.")
+
+    submission = (
+        db.query(Submission)
+        .filter(Submission.id == payload.submissionId, Submission.user_id == current_user.id)
+        .first()
+    )
+    if submission is None or submission.session_id is None or submission.study_session is None:
+        raise HTTPException(status_code=404, detail="Teslim bulunamadı.")
+    session = submission.study_session
+    feedback_mode = feedback_mode_for(current_user)
+    base_meta = {"attempt_no": submission.attempt_no, "feedback_mode": feedback_mode}
+
+    if payload.event == "result_viewed":
+        _log_interaction_event(
+            db, session, "result_viewed",
+            submission_id=submission.submission_id, actor_type="student", actor_id=current_user.id,
+            metadata={**base_meta, "ui_level": payload.uiLevel,
+                      "ui_level_name": UI_LEVEL_NAMES.get(payload.uiLevel)},
+        )
+    else:
+        if feedback_mode != "socratic":
+            raise HTTPException(status_code=400, detail="Bu koşulda kademe yoktur.")
+        if payload.fromLevel is None or payload.toLevel is None or payload.toLevel != payload.fromLevel + 1:
+            raise HTTPException(status_code=422, detail="Geçersiz kademe geçişi.")
+        _log_interaction_event(
+            db, session, "scaffold_advanced",
+            submission_id=submission.submission_id, actor_type="student", actor_id=current_user.id,
+            metadata={**base_meta, "from_level": payload.fromLevel, "to_level": payload.toLevel,
+                      "to_level_name": UI_LEVEL_NAMES[payload.toLevel]},
+        )
+        if payload.toLevel == 3:
+            previous_status = session.session_status
+            session.session_status = "FULL_REPORT_UNLOCKED"
+            if session.full_report_unlocked_at is None:
+                session.full_report_unlocked_at = _utcnow()
+            session.updated_at = _utcnow()
+            _log_interaction_event(
+                db, session, "full_report_unlocked",
+                submission_id=submission.submission_id, actor_type="student", actor_id=current_user.id,
+                from_status=previous_status, to_status="FULL_REPORT_UNLOCKED",
+                metadata={**base_meta, "unlock_reason": "student_request"},
+            )
+
+    session.last_activity_at = _utcnow()
+    db.commit()
+    return Response(status_code=204)

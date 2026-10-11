@@ -97,6 +97,15 @@ class SubmissionRequest(BaseModel):
     assignmentId: Optional[int] = Field(None, description="Ödev ID — kalıcı kayıt için (Faz 3)")
     researchConsent: Optional[bool] = Field(False, description="YAYIN_016 araştırma onam bayrağı")
 
+class InteractionLogRequest(BaseModel):
+    """YAYIN 016 uygulama sadakati: sonuç ekranı görüntüleme ve Sokratik kademe ilerlemesi."""
+    submissionId: int
+    event: Literal["result_viewed", "scaffold_advanced"]
+    uiLevel: Optional[int] = Field(None, ge=0, le=3, description="result_viewed: açılıştaki kademe (0-3)")
+    fromLevel: Optional[int] = Field(None, ge=0, le=3)
+    toLevel: Optional[int] = Field(None, ge=0, le=3)
+
+
 class PasswordChange(BaseModel):
     oldPassword: str
     newPassword: str

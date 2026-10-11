@@ -74,3 +74,24 @@ export const gradeSubmission = async (
 
   return (await response.json()) as GradeResponse;
 };
+
+/**
+ * YAYIN 016 uygulama sadakati logu (ateşle-unut). Hata öğrenci deneyimini etkilemez.
+ * result_viewed: sonuç ekranı açıldı; scaffold_advanced: bir sonraki Sokratik kademeye geçildi.
+ */
+export const logInteraction = (
+  token: string,
+  payload:
+    | { submissionId: number; event: "result_viewed"; uiLevel?: number | null }
+    | { submissionId: number; event: "scaffold_advanced"; fromLevel: number; toLevel: number }
+): void => {
+  if (!token || !Number.isFinite(payload.submissionId)) return;
+  fetch(`${BACKEND_URL}/api/interaction`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => {
+    /* sessizce yok say */
+  });
+};

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserRole, Assignment, Announcement, Submission, GradingResult, StudyConfig } from './types';
 import { Layout } from './components/Layout';
-import { gradeSubmission, GradeRequestError } from './services/geminiService';
+import { gradeSubmission, GradeRequestError, logInteraction } from './services/geminiService';
 import { parseGradingResult } from './utils/parseGradingResult';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Login } from './components/Login';
@@ -223,6 +223,7 @@ const AppContent = () => {
   // 0'dan başlar (sadece farkındalık sorusu). Öğrenci kendi iradesiyle ipucu istedikçe
   // kademe artar; modal kapandığında 0'a sıfırlanır (bkz. aşağıdaki useEffect).
   const [scaffoldingLevel, setScaffoldingLevel] = useState(0);
+  const viewLoggedRef = useRef<string | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [codeDraft, setCodeDraft] = useState('');
   const [isGrading, setIsGrading] = useState(false);
@@ -254,6 +255,7 @@ const AppContent = () => {
   useEffect(() => {
     if (!selectedSubmission) {
       setScaffoldingLevel(0);
+      viewLoggedRef.current = null; // modal kapandı: yeniden açılış ayrı görüntüleme sayılır
       return;
     }
 
@@ -266,8 +268,37 @@ const AppContent = () => {
     ).length;
     const correctionAttemptUsed = attemptCount >= studyConfig.max_attempts;
 
-    setScaffoldingLevel(isPerfectScore || correctionAttemptUsed ? 3 : 0);
+    const initialLevel = isPerfectScore || correctionAttemptUsed ? 3 : 0;
+    setScaffoldingLevel(initialLevel);
+
+    // YAYIN 016 sadakat logu: öğrencinin sonuç ekranını açması (her teslim/sekme için bir kez).
+    if (role === 'student' && token && viewLoggedRef.current !== selectedSubmission.id) {
+      viewLoggedRef.current = selectedSubmission.id;
+      const gr = selectedSubmission.gradingResult;
+      const gated = gr?.feedbackMode !== 'grade_only' && !!gr?.socraticFeedback;
+      logInteraction(token, {
+        submissionId: parseInt(selectedSubmission.id),
+        event: 'result_viewed',
+        uiLevel: gated ? initialLevel : null,
+      });
+    }
   }, [selectedSubmission?.id, studyConfig.max_attempts, studyConfig.success_threshold]);
+
+  // Deney koşulunda "Daha Fazla İpucu" / "Tam Raporu Gör": kademe ilerler ve loglanır.
+  const advanceScaffoldingLevel = () => {
+    const from = scaffoldingLevel;
+    const to = Math.min(from + 1, 3);
+    if (to === from) return;
+    setScaffoldingLevel(to);
+    if (role === 'student' && token && selectedSubmission) {
+      logInteraction(token, {
+        submissionId: parseInt(selectedSubmission.id),
+        event: 'scaffold_advanced',
+        fromLevel: from,
+        toLevel: to,
+      });
+    }
+  };
 
   const [modalSearchTerm, setModalSearchTerm] = useState('');
 
@@ -1794,7 +1825,7 @@ const AppContent = () => {
               <div className={`border-t border-dark-700/60 bg-dark-900/60 p-5 sm:p-6 flex flex-col-reverse sm:flex-row items-center gap-3 shrink-0 ${hideEditCodeButton ? 'justify-center' : 'justify-between'}`}>
                 {effectiveLevel < 3 ? (
                   <button
-                    onClick={() => setScaffoldingLevel(l => Math.min(l + 1, 3))}
+                    onClick={advanceScaffoldingLevel}
                     className={`w-full sm:w-auto px-6 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 border ${effectiveLevel === 2
                       ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
                       : 'bg-dark-700 hover:bg-dark-600 text-white border-dark-600'

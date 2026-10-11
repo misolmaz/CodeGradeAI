@@ -27,6 +27,9 @@ Değişken eklendikten veya değiştikten sonra backend yeniden başlatılmalıd
 | İlk giriş | `is_first_login` uygulanmıyordu | Öğrenci parolasını değiştirmeden ödev gönderemez; yeni parola en az 6 karakter ve öğrenci numarasından farklı. Öğretmenin parola sıfırlaması ilk giriş zorunluluğunu yeniden açar |
 | Teslim silme | Öğrenci kendi teslimini silebiliyordu; değerlendirmesi olan teslimin silinmesi PostgreSQL'de yabancı anahtar hatası verirdi | Yalnızca öğretmen/yönetici kaldırabilir. Araştırma kaydı fiziksel silinmez: `submission_source = teacher_removed` olur, listeden ve deneme sayısından çıkar, işlem loglanır; öğrenci yeniden gönderebilir |
 | Oyunlaştırma | Her zaman açık | `GAMIFICATION_ENABLED=false` ile öğrencide kapalı |
+| Uygulama sadakati | İpucu kademesi yalnızca tarayıcıda tutuluyordu | `POST /api/interaction`: `result_viewed` (iki koşul; açılıştaki kademe), `scaffold_advanced` (deney; kademe 0-1-2-3), kademe 3'te `full_report_unlocked` ve `study_sessions.full_report_unlocked_at` |
+
+Not: `study_sessions.consent_recorded` alanı arayüzden doldurulmuyor (her zaman `false`). Onam kâğıt üzerinde alındığı için analizde bu alana göre süzme yapılmamalıdır.
 
 ## 3. Yayına almadan önce kontrol (yaklaşık 15 dakika)
 
@@ -35,7 +38,7 @@ Değişken eklendikten veya değiştikten sonra backend yeniden başlatılmalıd
 3. Bir test ödevi oluştur. İki test öğrencisi kullan: biri kontrol sınıf kodunda, biri deney sınıf kodunda.
 4. Her iki öğrenciyle giriş yap: parola değiştirme ekranı gelmeli.
 5. Kontrol öğrencisi: teslim sonrası yalnızca puan paneli görünmeli. Tarayıcı geliştirici araçları > Ağ sekmesinde `/api/grade` yanıtında `feedback` boş, `socraticFeedback` `null` olmalı.
-6. Deney öğrencisi: ilk teslimde farkındalık sorusu, ikinci teslimde tam rapor görünmeli.
+6. Deney öğrencisi: ilk teslimde farkındalık sorusu, ikinci teslimde tam rapor görünmeli. "Daha Fazla İpucu" tıklamaları `interaction_events` tablosunda `scaffold_advanced` olarak görünmeli.
 7. Üçüncü teslim denemesi iki öğrencide de reddedilmeli.
 8. Öğretmen hesabıyla iki öğrencinin teslimlerinde tam rapor görünmeli.
 9. Test kayıtlarını sil veya çalışma verisinden ayırmak için test öğrencilerinin numaralarını not et.
