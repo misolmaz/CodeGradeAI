@@ -1931,7 +1931,7 @@ const AppContent = () => {
                     <td className="px-8 py-6 text-center">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border ${studentSubs.length > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                         }`}>
-                        {studentSubs.length > 0 ? `${studentSubs.length} ÖDEV TAMAM` : 'HİÇ ÖDEV YOK'}
+                        {studentSubs.length > 0 ? `${new Set(studentSubs.map(s => s.assignmentId)).size} ÖDEV TAMAM` : 'HİÇ ÖDEV YOK'}
                       </span>
                     </td>
                   </tr>
