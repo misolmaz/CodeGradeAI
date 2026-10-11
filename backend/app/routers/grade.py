@@ -18,6 +18,7 @@ from ..study_config import (
     SUBMISSION_SOURCE_AI_ERROR,
     feedback_mode_for,
     gamification_enabled,
+    max_code_chars,
     max_attempts_per_assignment,
     public_config,
     student_view_of_grading_result,
@@ -28,6 +29,9 @@ from .assignments import is_assignment_targeted_to_user
 from .users import get_current_user
 
 router = APIRouter(tags=["Grading"])
+
+# Değerlendirmesi süren (öğrenci, ödev) çiftleri; bkz. grade_code.
+_INFLIGHT: set = set()
 
 
 def counted_submissions_query(db: Session, user_id: int, assignment_id: int):
@@ -107,8 +111,22 @@ async def grade_code(
     is_student = current_user.role == "student"
     feedback_mode = feedback_mode_for(current_user)
 
+    if len(request.studentCode or "") > max_code_chars():
+        raise HTTPException(
+            status_code=413,
+            detail=f"Kod çok uzun (en fazla {max_code_chars()} karakter).",
+        )
+
+    inflight_key = None
     if is_student:
+        # Aynı öğrenci aynı ödev için eşzamanlı iki istek gönderirse (çift tıklama veya
+        # elle paralel istek) ikisi de deneme sınırını geçebilirdi. Denetleme ile kaydın
+        # arasında await olmadığından bu küme işlemi tek işçili sunucuda atomiktir.
+        inflight_key = (current_user.id, request.assignmentId)
+        if inflight_key in _INFLIGHT:
+            raise HTTPException(status_code=409, detail="Bu ödev için değerlendirme sürüyor; lütfen bekleyin.")
         _validate_student_submission(db, current_user, request)
+        _INFLIGHT.add(inflight_key)
         persist_user = current_user
     else:
         request = request.model_copy(update={"assignmentId": None})
@@ -122,6 +140,9 @@ async def grade_code(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if inflight_key is not None:
+            _INFLIGHT.discard(inflight_key)
 
     if is_student and submission is not None and submission.submission_source == SUBMISSION_SOURCE_AI_ERROR:
         # Deneme hakkından düşülmez; öğrenci tekrar gönderebilir.

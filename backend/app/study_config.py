@@ -68,6 +68,12 @@ def max_attempts_per_assignment() -> int:
     return max(1, _env_int("MAX_ATTEMPTS_PER_ASSIGNMENT", 2))
 
 
+def max_code_chars() -> int:
+    """Teslim edilen kodun en fazla uzunluğu (MAX_CODE_CHARS, varsayılan 20000). API maliyetini ve
+    aşırı uzun girdiyle modeli bozma girişimlerini sınırlar."""
+    return max(1000, _env_int("MAX_CODE_CHARS", 20000))
+
+
 def success_grade_threshold() -> int:
     return _env_int("SUCCESS_GRADE_THRESHOLD", 90)
 

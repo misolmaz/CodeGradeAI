@@ -411,3 +411,38 @@ def test_ai_call_does_not_block_event_loop(monkeypatch):
         return time.perf_counter() - t
 
     assert asyncio.run(run()) < 1.5
+
+
+def test_code_length_limit():
+    ids, aid = _setup()
+    h = _login(ids["exp"][1])
+    r = client.post("/api/grade", headers=h, json={
+        "assignmentDescription": "x", "assignmentLanguage": "C#",
+        "studentCode": "a" * 20001, "assignmentId": aid})
+    assert r.status_code == 413
+
+
+def test_parallel_requests_cannot_exceed_attempt_limit(monkeypatch):
+    """Aynı öğrenci aynı anda 3 istek gönderse de en fazla 2 değerlendirme kaydedilir."""
+    import asyncio
+    import httpx
+
+    async def slow(request):
+        await asyncio.sleep(0.3)
+        return _full_result(50)
+    monkeypatch.setattr(services, "grade_submission", slow)
+
+    ids, aid = _setup()
+    h = _login(ids["exp"][1])
+    body = {"assignmentDescription": "x", "assignmentLanguage": "C#", "studentCode": "int a;", "assignmentId": aid}
+
+    async def run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as ac:
+            return await asyncio.gather(*[ac.post("/api/grade", headers=h, json=body) for _ in range(3)])
+
+    codes = sorted(r.status_code for r in asyncio.run(run()))
+    assert codes.count(200) == 1 and codes.count(409) == 2, codes
+    # Sonra sıralı ikinci deneme hâlâ mümkün, üçüncüsü değil
+    assert _grade(h, aid).status_code == 200
+    assert _grade(h, aid).status_code == 409

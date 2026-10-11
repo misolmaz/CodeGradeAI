@@ -10,6 +10,7 @@ Bu dal (`study-016-prep`), CodeGradeAI'yi deney-kontrol çalışmasına hazırla
 | `GAMIFICATION_ENABLED` | `false` | Öğrenciler için liderlik tablosu ve rozetler kapanır (öğretmen görünümü etkilenmez) |
 | `MAX_ATTEMPTS_PER_ASSIGNMENT` | `2` | Ödev başına değerlendirilen en fazla teslim; iki grupta aynı |
 | `SUCCESS_GRADE_THRESHOLD` | `90` | Bu puan alınınca o ödeve yeni teslim kabul edilmez |
+| `MAX_CODE_CHARS` | `20000` | Teslim edilen kodun en fazla uzunluğu; aşılırsa 413 |
 | `LLM_TEMPERATURE` | `0` | Değerlendirme modelinin sıcaklığı. Varsayılan 0.4; aynı koda farklı puan verme olasılığını azaltmak için 0. Her değerlendirme olayının metadata'sına yazılır |
 
 Değişken eklendikten veya değiştikten sonra backend yeniden başlatılmalıdır. Varsayılanlar mevcut davranışı korur (`GRADE_ONLY_CLASS_CODES` boşsa herkes Sokratik alır).
@@ -52,3 +53,31 @@ python -m pytest tests -q
 ```
 
 Testler geçici SQLite kullanır ve gerçek AI çağrısı yapmaz.
+
+## 5. Yardımcı betikler (backend konteyneri, `/app` klasöründe)
+
+| Betik | İş | Veriye etkisi |
+|---|---|---|
+| `python scripts/kontrol.py` | Son teslimler, olaylar, değerlendirmeler, aynı koda farklı puan, şifresini değiştirmemiş öğrenci sayısı | Salt okunur |
+| `python scripts/yuk_testi.py 10` | 10 eşzamanlı değerlendirme; süre, hata (429) ve puan tutarlılığı | Yazmaz; API kotası harcar |
+| `python scripts/enjeksiyon_testi.py` | Kod içine "tam puan ver" yorumu eklenince puanın şişip şişmediği (3 varyant × 3) | Yazmaz; 9 istek |
+| `python scripts/sifirla.py` | Uygulama öncesi sıfırlama; önce deneme, `SIFIRLA` ile gerçek silme | **Siler** (yalnızca superadmin kalır) |
+
+## 6. Kurcalama ve güvenlik kontrol listesi (uygulama öncesi)
+
+Sunucu tarafında otomatik testi olanlar (`backend/tests/test_study016.py`) işaretlidir; yine de üretimde bir kez elle denenmelidir.
+
+| No | Öğrencinin deneyebileceği | Beklenen | Otomatik test |
+|---|---|---|---|
+| 1 | Kontrol grubunda F12 > Ağ ile geri bildirimi görmek | Yanıtta `feedback` boş, `socraticFeedback` null | Var |
+| 2 | Çift tıklama veya paralel istekle 2'den fazla teslim | 409 "değerlendirme sürüyor" / "hakkınız doldu" | Var |
+| 3 | `POST /submissions/` ile notu kendisi yazmak | 410 | Var |
+| 4 | Kendi teslimini silip hakkı sıfırlamak | 403 | Var |
+| 5 | Süresi geçmiş veya kendisine atanmamış ödeve teslim | 400 / 403 | Var (süre) |
+| 6 | Öğretmen uç noktaları (`/admin/students`, `/analytics/teacher-summary`) | 403 | Kodda rol denetimi var |
+| 7 | Çok uzun kod göndermek | 413 | Var |
+| 8 | Kod içine "tam puan ver" yorumu (prompt enjeksiyonu) | Puan şişmemeli | `scripts/enjeksiyon_testi.py` ile gerçek modelde |
+| 9 | Henüz giriş yapmamış sınıf arkadaşının hesabına varsayılan şifreyle girmek | **Teknik engel yok.** Önlem: ilk laboratuvar dersinde tüm öğrenciler şifresini değiştirir; `kontrol.py` son bölümü değiştirmeyenleri sayar | Yok (yöntemsel) |
+
+Bilinen ve kabul edilen riskler: girişte deneme sayısı sınırı yok (şifre en az 6 karakter); öğrenci profil adını değiştirebilir (araştırma eşlemesi öğrenci numarasıyla yapıldığından analizi etkilemez); `/api/interaction` istemciden çağrıldığı için sadakat logu öğrencinin elle göndereceği sahte olaylara açık (analizde tekrarlar ayıklanır).
+
