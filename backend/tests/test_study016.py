@@ -46,6 +46,7 @@ from app.schemas import (  # noqa: E402
 )
 
 client = TestClient(app)
+_REAL_GRADE = services.grade_submission  # gerçek fonksiyon (fixture taklit etmeden önce)
 
 NEXT_GRADE = {"value": 55}
 
@@ -382,3 +383,31 @@ def test_fidelity_log_rules():
     ht = _login(ids["teacher"][1])
     assert client.post("/api/interaction", headers=ht, json={
         "submissionId": sid_e, "event": "result_viewed"}).status_code == 403
+
+
+def test_ai_call_does_not_block_event_loop(monkeypatch):
+    """generate_content senkron çağrısı iş parçacığında çalışmalı: 5 eşzamanlı değerlendirme ~1 sn."""
+    import asyncio
+    import time
+
+    class FakeModel:
+        def __init__(self, *a, **k):
+            pass
+
+        def generate_content(self, prompt):
+            time.sleep(0.5)
+
+            class R:
+                text = "{bozuk"
+            return R()
+
+    monkeypatch.setattr(services.genai, "GenerativeModel", FakeModel)
+    monkeypatch.setattr(services, "API_KEY", "test-key", raising=False)
+    from app.schemas import SubmissionRequest
+    req = SubmissionRequest(assignmentDescription="x", assignmentLanguage="C#", studentCode="x")
+    async def run():
+        t = time.perf_counter()
+        await asyncio.gather(*[_REAL_GRADE(req) for _ in range(5)])
+        return time.perf_counter() - t
+
+    assert asyncio.run(run()) < 1.5

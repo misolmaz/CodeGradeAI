@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 import re
 import hashlib
 import time
@@ -544,7 +545,10 @@ pedagogicalMetadata içinde prompt_version="{PROMPT_VERSION}", rubric_version="{
     )
 
     try:
-        response = model.generate_content(final_prompt)
+        # YAYIN 016: generate_content senkron (bloklayan) bir çağrı. Doğrudan async fonksiyon
+        # içinde çağrılınca olay döngüsü 5-20 sn kilitleniyor; tek uvicorn işçisinde tüm
+        # uygulama (giriş, sayfa yükleme, diğer teslimler) sıraya giriyordu. İş parçacığına alınır.
+        response = await asyncio.to_thread(model.generate_content, final_prompt)
         text = response.text.strip()
         print(f"DEBUG: AI Response: {text}")
 
