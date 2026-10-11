@@ -10,6 +10,7 @@ Bu dal (`study-016-prep`), CodeGradeAI'yi deney-kontrol çalışmasına hazırla
 | `GAMIFICATION_ENABLED` | `false` | Öğrenciler için liderlik tablosu ve rozetler kapanır (öğretmen görünümü etkilenmez) |
 | `MAX_ATTEMPTS_PER_ASSIGNMENT` | `2` | Ödev başına değerlendirilen en fazla teslim; iki grupta aynı |
 | `SUCCESS_GRADE_THRESHOLD` | `90` | Bu puan alınınca o ödeve yeni teslim kabul edilmez |
+| `LLM_TEMPERATURE` | `0` | Değerlendirme modelinin sıcaklığı. Varsayılan 0.4; aynı koda farklı puan verme olasılığını azaltmak için 0. Her değerlendirme olayının metadata'sına yazılır |
 
 Değişken eklendikten veya değiştikten sonra backend yeniden başlatılmalıdır. Varsayılanlar mevcut davranışı korur (`GRADE_ONLY_CLASS_CODES` boşsa herkes Sokratik alır).
 

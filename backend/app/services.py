@@ -261,6 +261,10 @@ def _map_strict_to_grading_result(strict: StrictGradingResult) -> GradingResult:
 API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 # Default to the most universal stable model if not specified
 MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+try:
+    LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.4"))
+except ValueError:
+    LLM_TEMPERATURE = 0.4
 
 
 
@@ -520,7 +524,9 @@ pedagogicalMetadata içinde prompt_version="{PROMPT_VERSION}", rubric_version="{
 """
 
     generation_config = {
-        "temperature": 0.4,
+        # YAYIN 016: aynı koda tutarlı puan için sıcaklık ortam değişkeniyle düşürülebilir
+        # (LLM_TEMPERATURE=0). Varsayılan önceki davranıştır (0.4).
+        "temperature": LLM_TEMPERATURE,
         "top_p": 1,
         "top_k": 32,
         "max_output_tokens": 8192,
@@ -858,6 +864,7 @@ def finalize_grading_persistence(
             "error_count": len(result.errorFindings or []),
             "latency_ms": latency_ms,
             "parse_status": parse_status,
+            "temperature": LLM_TEMPERATURE,
         },
     )
 
