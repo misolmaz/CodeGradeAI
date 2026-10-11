@@ -68,6 +68,8 @@ async def reset_student_password(
     
     # Reset password to student_number
     student.password_hash = get_password_hash(student_number)
+    # Varsayılan parolaya dönüldüğü için ilk girişte parola değişimi yeniden zorunlu olur.
+    student.is_first_login = True
     db.commit()
     
     return {"message": f"{student_number} numaralı öğrencinin şifresi başarıyla sıfırlandı."}

@@ -8,7 +8,13 @@ from ..models import Submission, User, Assignment
 from ..schemas import SubmissionCreate, SubmissionOut, Badge
 from .users import get_current_user
 from .assignments import is_assignment_targeted_to_user
-from ..badges import check_badges
+from ..study_config import (
+    SUBMISSION_SOURCE_TEACHER_REMOVED,
+    feedback_mode_for,
+    student_view_of_grading_result,
+    visible_submission_clause,
+)
+from ..services import _log_interaction_event
 
 router = APIRouter(prefix="/submissions", tags=["Submissions"])
 
@@ -27,57 +33,17 @@ def _coerce_grading_result(raw: Any) -> Optional[Dict[str, Any]]:
 
 @router.post("/", response_model=SubmissionOut)
 async def create_submission(
-    submission: SubmissionCreate, 
-    db: Session = Depends(get_db),
+    submission: SubmissionCreate,
     current_user: User = Depends(get_current_user)
 ):
-    # Deadline Check
-    assignment = db.query(Assignment).filter(Assignment.id == submission.assignment_id, Assignment.organization_id == current_user.organization_id).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Ödev bulunamadı")
-
-    # Security: enforce assignment targeting (class/specific-student) server-side.
-    # Previously this was only checked in the frontend UI, so a student could call
-    # this endpoint directly to submit to an assignment never assigned to them.
-    if not is_assignment_targeted_to_user(assignment, current_user):
-        raise HTTPException(status_code=403, detail="Bu ödev size atanmamış.")
-
-    if assignment.due_date:
-        try:
-            # Handle ISO format from seed or simple date string
-            # If ISO format ends with Z or +00:00, fromisoformat handles it (Python 3.11+ better, but 3.9+ supports basic)
-            # Our seed uses .isoformat(), which usually gives 'YYYY-MM-DDTHH:MM:SS.mmmmmm'
-            deadline = datetime.fromisoformat(assignment.due_date)
-            # Ensure both are offset-naive for comparison to avoid TypeError
-            if deadline.tzinfo:
-                deadline = deadline.replace(tzinfo=None)
-                
-            if datetime.utcnow() > deadline:
-                raise HTTPException(status_code=400, detail="Bu ödevin teslim süresi dolmuştur.")
-        except ValueError:
-            pass # Invalid date format in DB, skipping check for safety
-
-    db_submission = Submission(
-        user_id=current_user.id,
-        assignment_id=submission.assignment_id,
-        code_content=submission.code_content,
-        grading_result=submission.grading_result
+    # Eski iki adımlı akışta not istemciden geliyordu (grading_result gövdede); bu,
+    # öğrencinin notu kendisinin yazabilmesi demekti. Teslim artık yalnızca
+    # POST /api/grade ile yapılır: teslim sunucuda oluşturulur ve değerlendirilir.
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Bu uç nokta kullanımdan kaldırıldı. Teslimler /api/grade üzerinden yapılır.",
     )
-    db.add(db_submission)
-    db.commit()
-    db.refresh(db_submission)
-    db.refresh(db_submission)
-    
-    # Check Badges
-    new_badges_data = check_badges(current_user.id, db, db_submission.id)
-    
-    # Convert to Pydantic model response
-    response = SubmissionOut.model_validate(db_submission)
-    # Manually populate computed fields if needed (student_name usually None in simple mapping unless hybrid prop)
-    response.student_name = current_user.full_name 
-    response.new_badges = [Badge(**b) for b in new_badges_data]
-                      
-    return response
+
 
 @router.get("/", response_model=List[SubmissionOut])
 async def get_submissions(
@@ -91,8 +57,13 @@ async def get_submissions(
         .join(User, Submission.user_id == User.id)
         .filter(User.organization_id == current_user.organization_id)
     )
-    if current_user.role not in ("teacher", "superadmin"):
+    is_student = current_user.role not in ("teacher", "superadmin")
+    if is_student:
         query = query.filter(Submission.user_id == current_user.id)
+    # AI hatasıyla sonuçlanan ve öğretmence kaldırılan teslimler logda kalır ama
+    # listede (ve deneme sayısında) yer almaz.
+    query = query.filter(visible_submission_clause())
+    feedback_mode = feedback_mode_for(current_user)
 
     results = query.order_by(Submission.submitted_at.desc()).all()
 
@@ -103,6 +74,10 @@ async def get_submissions(
         grading_result = _coerce_grading_result(res.grading_result)
         if not grading_result and res.evaluation is not None:
             grading_result = _coerce_grading_result(res.evaluation.grading_result_json)
+
+        if is_student:
+            # grade_only koşulunda öğrenci yalnızca puanı görür (süzme sunucu tarafında).
+            grading_result = student_view_of_grading_result(grading_result, feedback_mode)
 
         submission_out = SubmissionOut.model_validate(res)
         submission_out.grading_result = grading_result
@@ -122,9 +97,30 @@ async def delete_submission(
     if not db_submission:
         raise HTTPException(status_code=404, detail="Teslimat bulunamadı")
     
-    if current_user.role != "teacher" and db_submission.user_id != current_user.id:
+    # Öğrenciler kendi teslimlerini silemez: silme deneme hakkını sıfırlar ve araştırma
+    # verisini yok eder. Silme yetkisi yalnızca öğretmen/yöneticidedir.
+    if current_user.role not in ("teacher", "superadmin"):
         raise HTTPException(status_code=403, detail="Yetkiniz yok")
     
+    if db_submission.session_id is not None:
+        # Araştırma kaydı: evaluations/interaction_events bu teslime bağlı olduğundan
+        # fiziksel silme yapılmaz. Teslim listeden ve deneme sayısından çıkarılır,
+        # öğrenci yeniden gönderebilir; işlem loglanır.
+        db_submission.submission_source = SUBMISSION_SOURCE_TEACHER_REMOVED
+        session = db_submission.study_session
+        if session is not None:
+            _log_interaction_event(
+                db,
+                session,
+                "submission_removed_by_teacher",
+                submission_id=db_submission.submission_id,
+                actor_type="teacher",
+                actor_id=current_user.id,
+                metadata={"attempt_no": db_submission.attempt_no},
+            )
+        db.commit()
+        return {"message": "Teslimat kaldırıldı"}
+
     db.delete(db_submission)
     db.commit()
     return {"message": "Teslimat silindi"}

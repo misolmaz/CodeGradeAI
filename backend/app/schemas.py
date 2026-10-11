@@ -76,6 +76,18 @@ class GradingResult(BaseModel):
     errorFindings: Optional[List[ErrorFinding]] = Field(None, description="Tespit edilen hatalar (v0.2)")
     socraticFeedback: Optional[SocraticFeedback] = Field(None, description="Sokratik geri bildirim (v0.2)")
     pedagogicalMetadata: Optional[PedagogicalMetadata] = Field(None, description="Pedagojik meta veri (v0.2)")
+    feedbackMode: Optional[str] = Field(None, description="Öğrenciye gösterilen geri bildirim modu: socratic | grade_only (YAYIN 016)")
+
+
+class GradeResponse(GradingResult):
+    """/api/grade yanıtı: (öğrenci koşuluna göre süzülmüş) değerlendirme + sunucuda oluşturulan teslim."""
+    submissionId: Optional[int] = None
+    assignmentId: Optional[int] = None
+    userId: Optional[int] = None
+    studentName: Optional[str] = None
+    submittedAt: Optional[datetime] = None
+    attemptNo: Optional[int] = None
+    newBadges: List[Badge] = []
 
 class SubmissionRequest(BaseModel):
     assignmentDescription: str = Field(..., description="Ödevin ne istediği")
@@ -84,6 +96,15 @@ class SubmissionRequest(BaseModel):
     studentLevel: Literal["beginner", "intermediate", "advanced"] = Field("beginner", description="Öğrenci seviyesi")
     assignmentId: Optional[int] = Field(None, description="Ödev ID — kalıcı kayıt için (Faz 3)")
     researchConsent: Optional[bool] = Field(False, description="YAYIN_016 araştırma onam bayrağı")
+
+class InteractionLogRequest(BaseModel):
+    """YAYIN 016 uygulama sadakati: sonuç ekranı görüntüleme ve Sokratik kademe ilerlemesi."""
+    submissionId: int
+    event: Literal["result_viewed", "scaffold_advanced"]
+    uiLevel: Optional[int] = Field(None, ge=0, le=3, description="result_viewed: açılıştaki kademe (0-3)")
+    fromLevel: Optional[int] = Field(None, ge=0, le=3)
+    toLevel: Optional[int] = Field(None, ge=0, le=3)
+
 
 class PasswordChange(BaseModel):
     oldPassword: str

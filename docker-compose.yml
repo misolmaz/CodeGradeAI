@@ -10,6 +10,11 @@ services:
       - ALLOWED_ORIGINS=http://your-vps-ip,http://your-domain.com
       - PORT=8000
       - DATABASE_URL=sqlite:////app/data/sql_app.db
+      # YAYIN 016 (bkz. docs/YAYIN016_Calisma_Ayarlari.md)
+      - GRADE_ONLY_CLASS_CODES=${GRADE_ONLY_CLASS_CODES:-}
+      - GAMIFICATION_ENABLED=${GAMIFICATION_ENABLED:-true}
+      - MAX_ATTEMPTS_PER_ASSIGNMENT=${MAX_ATTEMPTS_PER_ASSIGNMENT:-2}
+      - SUCCESS_GRADE_THRESHOLD=${SUCCESS_GRADE_THRESHOLD:-90}
 
     volumes:
       - db_data:/app/data

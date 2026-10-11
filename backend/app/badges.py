@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timedelta
 import json
 from .models import UserBadge, Submission, Assignment
+from .study_config import visible_submission_clause
 
 BADGE_DEFINITIONS = {
     "First Step": {
@@ -47,6 +48,7 @@ def check_badges(user_id: int, db: Session, current_submission_id: int = None):
         db.query(Submission)
         .options(joinedload(Submission.evaluation), joinedload(Submission.assignment))
         .filter(Submission.user_id == user_id)
+        .filter(visible_submission_clause())
         .all()
     )
     

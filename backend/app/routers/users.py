@@ -80,7 +80,8 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         "role": current_user.role,
         "class_code": current_user.class_code,
         "avatar_url": current_user.avatar_url,
-        "email": current_user.email
+        "email": current_user.email,
+        "is_first_login": bool(current_user.is_first_login),
     }
 
 @router.post("/change-password")
@@ -91,8 +92,15 @@ async def change_password(
 ):
     if not verify_password(data.oldPassword, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Mevcut şifre hatalı")
-    
-    current_user.password_hash = get_password_hash(data.newPassword)
+
+    new_password = data.newPassword or ""
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Yeni şifre en az 6 karakter olmalı")
+    if new_password == data.oldPassword or new_password == (current_user.student_number or ""):
+        raise HTTPException(status_code=400, detail="Yeni şifre eski şifreden ve öğrenci numaranızdan farklı olmalı")
+
+    current_user.password_hash = get_password_hash(new_password)
+    current_user.is_first_login = False
     db.commit()
     return {"message": "Şifre başarıyla güncellendi"}
 

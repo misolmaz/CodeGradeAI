@@ -35,6 +35,7 @@ from .auth import get_password_hash
 
 load_dotenv()
 import io
+from .study_config import SUBMISSION_SOURCE_AI_ERROR
 # ... (Gemini Init remains) ...
 
 def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = None):
@@ -715,6 +716,7 @@ def prepare_submission_for_grading(
     db: Session,
     student: User,
     request: SubmissionRequest,
+    feedback_mode: Optional[str] = None,
 ) -> Tuple[Optional[StudySession], Optional[Submission]]:
     """Teslim kaydı ve submission_created olayını AI çağrısından önce oluşturur."""
     if not request.assignmentId:
@@ -769,6 +771,8 @@ def prepare_submission_for_grading(
             "attempt_no": attempt_no,
             "code_hash": submission.code_hash,
             "line_count": _line_count(request.studentCode),
+            "feedback_mode": feedback_mode,
+            "class_code": student.class_code,
         },
     )
     db.commit()
@@ -877,17 +881,29 @@ def finalize_grading_persistence(
     return evaluation
 
 
+def _is_ai_failure(result: GradingResult) -> bool:
+    """_fallback_grading_result çıktısı: AI çağrısı/ayrıştırma başarısız."""
+    return result.pedagogicalMetadata is None and result.socraticFeedback is None and result.grade == 0
+
+
 async def grade_submission_with_persistence(
     db: Session,
     request: SubmissionRequest,
     student: Optional[User] = None,
-) -> GradingResult:
-    """AI değerlendirmesi yapar; bağlam varsa PostgreSQL'e kalıcı kaydeder."""
+    feedback_mode: Optional[str] = None,
+) -> Tuple[GradingResult, Optional[Submission]]:
+    """AI değerlendirmesi yapar; bağlam varsa PostgreSQL'e kalıcı kaydeder.
+
+    Dönüş: (tam değerlendirme, oluşturulan teslim veya None). Öğrenciye gösterilecek
+    süzme çağıran tarafta yapılır; burada her zaman tam sonuç saklanır.
+    """
     session: Optional[StudySession] = None
     submission: Optional[Submission] = None
 
     if student and request.assignmentId:
-        session, submission = prepare_submission_for_grading(db, student, request)
+        session, submission = prepare_submission_for_grading(
+            db, student, request, feedback_mode=feedback_mode
+        )
 
     start = time.perf_counter()
     result = await grade_submission(request)
@@ -895,5 +911,17 @@ async def grade_submission_with_persistence(
 
     if session and submission and student:
         finalize_grading_persistence(db, session, submission, result, latency_ms, student)
+        if _is_ai_failure(result):
+            submission.submission_source = SUBMISSION_SOURCE_AI_ERROR
+            _log_interaction_event(
+                db,
+                session,
+                "analysis_failed",
+                submission_id=submission.submission_id,
+                actor_type="system",
+                metadata={"attempt_no": submission.attempt_no, "latency_ms": latency_ms},
+            )
+            db.commit()
+            db.refresh(submission)
 
-    return result
+    return result, submission
