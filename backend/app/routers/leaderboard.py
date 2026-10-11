@@ -9,6 +9,8 @@ from typing import List, Optional
 from pydantic import BaseModel
 from ..schemas import Badge
 from ..badges import BADGE_DEFINITIONS
+from ..study_config import gamification_enabled
+from ..study_config import visible_submission_clause
 
 router = APIRouter(
     prefix="/leaderboard",
@@ -33,6 +35,11 @@ async def get_leaderboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # YAYIN 016: oyunlaştırma kapalıyken öğrenciler liderlik tablosunu göremez
+    # (öğretmen görünümü etkilenmez).
+    if not gamification_enabled() and current_user.role == "student":
+        return []
+
     # Base query for students in current org
     users_query = db.query(User).filter(User.role == "student", User.organization_id == current_user.organization_id)
     if class_code:
@@ -46,6 +53,7 @@ async def get_leaderboard(
         db.query(Submission)
         .options(joinedload(Submission.evaluation), joinedload(Submission.assignment))
         .filter(Submission.user_id.in_(student_ids))
+        .filter(visible_submission_clause())
         .all()
     )
     

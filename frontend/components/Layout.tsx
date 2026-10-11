@@ -12,9 +12,11 @@ interface LayoutProps {
   currentView: string;
   setCurrentView: (view: string) => void;
   children: React.ReactNode;
+  /** YAYIN 016: oyunlaştırma kapalıyken öğrenci menüsünde liderlik tablosu gizlenir. */
+  showLeaderboard?: boolean;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, setCurrentView, children }) => {
+export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, setCurrentView, children, showLeaderboard = true }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { organizationName, token, login } = useAuth();
   const [organizations, setOrganizations] = useState<any[]>([]);
@@ -113,7 +115,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, set
               </span>
             </button>
           )}
-          {user.role !== UserRole.SUPERADMIN && (
+          {user.role !== UserRole.SUPERADMIN && showLeaderboard && (
             <button
               onClick={() => { setCurrentView('leaderboard'); setIsMobileMenuOpen(false); }}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === 'leaderboard' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-slate-400 hover:bg-dark-700 hover:text-white'

@@ -224,6 +224,10 @@ export function parseGradingResult(raw: string | unknown): GradingResult | null 
     const pedagogicalMetadata = parsePedagogicalMetadata(data.pedagogicalMetadata);
     if (pedagogicalMetadata) result.pedagogicalMetadata = pedagogicalMetadata;
 
+    if (data.feedbackMode === 'socratic' || data.feedbackMode === 'grade_only') {
+      result.feedbackMode = data.feedbackMode;
+    }
+
     return result;
   } catch {
     return null;

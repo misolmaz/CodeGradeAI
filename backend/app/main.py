@@ -2,14 +2,11 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import Optional
-from .schemas import SubmissionRequest, GradingResult
-from .services import grade_submission_with_persistence
 from .database import engine, Base, get_db
 from sqlalchemy import text
 from . import models
 from .models import User
-from .routers import admin, auth, users, assignments, submissions, announcements, leaderboard, analytics
-from .routers.users import get_optional_current_user
+from .routers import admin, auth, users, assignments, submissions, announcements, leaderboard, analytics, grade
 import os
 from dotenv import load_dotenv
 
@@ -87,6 +84,7 @@ app.include_router(submissions.router)
 app.include_router(announcements.router)
 app.include_router(leaderboard.router)
 app.include_router(analytics.router)
+app.include_router(grade.router)
 
 
 
@@ -107,22 +105,6 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {"message": "CodeGradeAI Backend is running", "status": "active"}
-
-@app.post("/api/grade", response_model=GradingResult)
-async def grade_code(
-    request: SubmissionRequest,
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_current_user),
-):
-    """
-    Analyzes and grades the submitted code using Google Gemini AI.
-    When assignmentId and auth token are provided, persists to PostgreSQL (Faz 3).
-    """
-    try:
-        result = await grade_submission_with_persistence(db, request, current_user)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

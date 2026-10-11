@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..database import get_db
 from ..models import Assignment, Submission, User
 from .users import get_current_user
+from ..study_config import visible_submission_clause
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -212,6 +213,7 @@ async def get_teacher_summary(
             db.query(Submission)
             .options(joinedload(Submission.evaluation))
             .filter(Submission.user_id.in_(student_ids))
+            .filter(visible_submission_clause())
             .order_by(Submission.submitted_at.asc(), Submission.id.asc())
             .all()
         )

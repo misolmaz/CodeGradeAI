@@ -76,6 +76,18 @@ class GradingResult(BaseModel):
     errorFindings: Optional[List[ErrorFinding]] = Field(None, description="Tespit edilen hatalar (v0.2)")
     socraticFeedback: Optional[SocraticFeedback] = Field(None, description="Sokratik geri bildirim (v0.2)")
     pedagogicalMetadata: Optional[PedagogicalMetadata] = Field(None, description="Pedagojik meta veri (v0.2)")
+    feedbackMode: Optional[str] = Field(None, description="Öğrenciye gösterilen geri bildirim modu: socratic | grade_only (YAYIN 016)")
+
+
+class GradeResponse(GradingResult):
+    """/api/grade yanıtı: (öğrenci koşuluna göre süzülmüş) değerlendirme + sunucuda oluşturulan teslim."""
+    submissionId: Optional[int] = None
+    assignmentId: Optional[int] = None
+    userId: Optional[int] = None
+    studentName: Optional[str] = None
+    submittedAt: Optional[datetime] = None
+    attemptNo: Optional[int] = None
+    newBadges: List[Badge] = []
 
 class SubmissionRequest(BaseModel):
     assignmentDescription: str = Field(..., description="Ödevin ne istediği")

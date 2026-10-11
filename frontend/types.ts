@@ -102,6 +102,15 @@ export interface GradingResult {
   errorFindings?: ErrorFinding[];
   socraticFeedback?: SocraticFeedback;
   pedagogicalMetadata?: PedagogicalMetadata;
+  /** YAYIN 016: sunucunun öğrenciye uyguladığı görünüm. grade_only = yalnızca puan (kontrol koşulu). */
+  feedbackMode?: 'socratic' | 'grade_only';
+}
+
+/** GET /api/config: koşul bilgisi içermeyen arayüz ayarları. */
+export interface StudyConfig {
+  gamification_enabled: boolean;
+  max_attempts: number;
+  success_threshold: number;
 }
 
 export interface Submission {

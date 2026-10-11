@@ -1,8 +1,8 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
-import { UserRole, Assignment, Announcement, Submission, GradingResult } from './types';
+import { UserRole, Assignment, Announcement, Submission, GradingResult, StudyConfig } from './types';
 import { Layout } from './components/Layout';
-import { gradeSubmission } from './services/geminiService';
+import { gradeSubmission, GradeRequestError } from './services/geminiService';
 import { parseGradingResult } from './utils/parseGradingResult';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Login } from './components/Login';
@@ -12,6 +12,7 @@ import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { SuperAdminHome } from './components/SuperAdminHome';
 import { EduInsight } from './components/EduInsight';
 import { LandingPage } from './components/LandingPage';
+import { ForcePasswordChange } from './components/ForcePasswordChange';
 
 import {
   Plus, Calendar, Clock, CheckCircle2, AlertCircle, FileCode,
@@ -187,6 +188,25 @@ const AppContent = () => {
   // Initialize state
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+
+  // YAYIN 016: koşul bilgisi içermeyen arayüz ayarları (oyunlaştırma, deneme hakkı,
+  // başarı eşiği). Sunucuya ulaşılamazsa mevcut varsayılanlar kullanılır.
+  const [studyConfig, setStudyConfig] = useState<StudyConfig>({
+    gamification_enabled: true,
+    max_attempts: 2,
+    success_threshold: 90,
+  });
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${API_BASE_URL}/api/config`, { signal: controller.signal })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (data && typeof data.max_attempts === 'number') setStudyConfig(data);
+      })
+      .catch(() => { /* varsayılanlarla devam */ });
+    return () => controller.abort();
+  }, []);
+
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [backendStudents, setBackendStudents] = useState<any[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(() => !!localStorage.getItem('token'));
@@ -237,17 +257,17 @@ const AppContent = () => {
       return;
     }
 
-    const isPerfectScore = (selectedSubmission.gradingResult?.grade ?? 0) >= 90;
+    const isPerfectScore = (selectedSubmission.gradingResult?.grade ?? 0) >= studyConfig.success_threshold;
 
     const attemptCount = submissions.filter(
       s =>
         s.assignmentId === selectedSubmission.assignmentId &&
         s.studentId === selectedSubmission.studentId
     ).length;
-    const correctionAttemptUsed = attemptCount >= 2;
+    const correctionAttemptUsed = attemptCount >= studyConfig.max_attempts;
 
     setScaffoldingLevel(isPerfectScore || correctionAttemptUsed ? 3 : 0);
-  }, [selectedSubmission?.id]);
+  }, [selectedSubmission?.id, studyConfig.max_attempts, studyConfig.success_threshold]);
 
   const [modalSearchTerm, setModalSearchTerm] = useState('');
 
@@ -539,6 +559,24 @@ const AppContent = () => {
     setProfileEmail(email || '');
   }, [avatarUrl, studentNumber, username, email]);
 
+  // YAYIN 016: ilk girişte (varsayılan parola = öğrenci no) parola değişimi zorunlu.
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  useEffect(() => {
+    if (!token || role !== 'student') {
+      setMustChangePassword(false);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`${API_BASE_URL}/users/me`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: controller.signal
+    })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => setMustChangePassword(!!data?.is_first_login))
+      .catch(() => { /* ağ hatasında engelleme yapma; sunucu yine de teslimi reddeder */ });
+    return () => controller.abort();
+  }, [token, role]);
+
   // Bootstrap gate: while the persisted token is being verified against the
   // backend (see AuthContext), never render an authenticated view or the bare
   // Login screen — an expired/forged token would otherwise flash as a valid,
@@ -562,6 +600,16 @@ const AppContent = () => {
 
   if (!token) {
     return <Login />;
+  }
+
+  if (role === 'student' && mustChangePassword) {
+    return (
+      <ForcePasswordChange
+        token={token}
+        onDone={() => setMustChangePassword(false)}
+        onLogout={logout}
+      />
+    );
   }
 
   const user = {
@@ -663,7 +711,13 @@ const AppContent = () => {
     gradingAbortRef.current = controller;
 
     try {
-      const gradingResult = await gradeSubmission(
+      if (!token) return;
+      // YAYIN 016: tek adımlı teslim. Teslim sunucuda oluşturulur, değerlendirilir ve
+      // kaydedilir; not artık istemciden gönderilmez. Yanıt öğrencinin koşuluna göre
+      // sunucuda süzülmüş olarak gelir.
+      const responseData = await gradeSubmission(
+        token,
+        parseInt(selectedAssignment.id),
         selectedAssignment.description,
         selectedAssignment.language,
         codeDraft,
@@ -671,72 +725,46 @@ const AppContent = () => {
         controller.signal
       );
 
-      if (gradingResult.grade === 0) {
-        setSubmitError(gradingResult.feedback || "Değerlendirme sırasında bir hata oluştu.");
-        return;
+      // Check new badges (oyunlaştırma kapalıysa sunucu boş liste döner)
+      if (studyConfig.gamification_enabled && responseData.newBadges && responseData.newBadges.length > 0) {
+        const badgeNames = responseData.newBadges.map((b: any) => b.name).join(", ");
+        setToast({
+          title: "Tebrikler! Yeni Rozet Kazandın!",
+          msg: `Harika iş! "${badgeNames}" rozetini profiline ekledik.`,
+          visible: true
+        });
+        setTimeout(() => setToast(null), 8000);
       }
 
-      const payload = {
-        assignment_id: parseInt(selectedAssignment.id),
-        code_content: codeDraft,
-        grading_result: JSON.stringify(gradingResult)
+      // Yeni değerlendirilmiş teslimatı, AI Analiz Raporu modalını otomatik
+      // açmak için yanıttan doğrudan inşa ediyoruz (fetchAllData'nın
+      // tamamlanmasını beklemeye gerek kalmadan).
+      const freshSubmission: Submission = {
+        id: responseData.submissionId?.toString() ?? '',
+        assignmentId: responseData.assignmentId?.toString() ?? selectedAssignment.id,
+        studentId: responseData.userId?.toString() ?? '',
+        studentName: responseData.studentName || user.name,
+        code: codeDraft,
+        submittedAt: responseData.submittedAt ?? new Date().toISOString(),
+        status: 'graded',
+        gradingResult: parseGradingResult(responseData) ?? undefined
       };
 
-
-
-      const res = await fetch(`${API_BASE_URL}/submissions/`, {
-
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-
-      if (res.ok) {
-        const responseData = await res.json();
-
-        // Check new badges
-        if (responseData.new_badges && responseData.new_badges.length > 0) {
-          const badgeNames = responseData.new_badges.map((b: any) => b.name).join(", ");
-          setToast({
-            title: "Tebrikler! Yeni Rozet Kazandın!",
-            msg: `Harika iş! "${badgeNames}" rozetini profiline ekledik.`,
-            visible: true
-          });
-          setTimeout(() => setToast(null), 8000);
-        }
-
-        // Yeni değerlendirilmiş teslimatı, AI Analiz Raporu modalını otomatik
-        // açmak için POST cevabından doğrudan inşa ediyoruz (fetchAllData'nın
-        // tamamlanmasını beklemeye gerek kalmadan).
-        const freshSubmission: Submission = {
-          id: responseData.id?.toString(),
-          assignmentId: responseData.assignment_id?.toString(),
-          studentId: responseData.user_id?.toString(),
-          studentName: responseData.student_name || user.name,
-          code: responseData.code_content,
-          submittedAt: responseData.submitted_at,
-          status: 'graded',
-          gradingResult: parseGradingResult(responseData.grading_result) ?? undefined
-        };
-
-        closeCodeModal();
-        await fetchAllData();
-        // Öğrenciyi Ana Sayfaya atmak yerine "Ödevler" görünümünde tutup
-        // sonucu doğrudan Sokratik AI Analiz Raporu modalıyla gösteriyoruz.
-        setCurrentView('assignments');
-        setSelectedSubmission(freshSubmission);
-      } else {
-        setSubmitError("Gönderim kaydedilemedi.");
-      }
+      closeCodeModal();
+      await fetchAllData();
+      // Öğrenciyi Ana Sayfaya atmak yerine "Ödevler" görünümünde tutup
+      // sonucu doğrudan AI Analiz Raporu modalıyla gösteriyoruz.
+      setCurrentView('assignments');
+      setSelectedSubmission(freshSubmission);
     } catch (error) {
       // Latest-Request-Wins: a cancelled request (modal closed, session ended)
       // is not a user-facing error — swallow it silently.
       if (isAbortError(error)) return;
-      setSubmitError("Hata oluştu! Lütfen internet bağlantınızı ve API anahtarınızı kontrol edin.");
+      setSubmitError(
+        error instanceof GradeRequestError
+          ? error.message
+          : "Hata oluştu! Lütfen internet bağlantınızı kontrol edip tekrar deneyin."
+      );
     } finally {
       if (!controller.signal.aborted) setIsGrading(false);
       if (gradingAbortRef.current === controller) gradingAbortRef.current = null;
@@ -1441,7 +1469,9 @@ const AppContent = () => {
     // ve Sokratik geri bildirim verisi mevcutsa devreye girer. Öğretmen görünümü ve
     // Sokratik verisi olmayan eski kayıtlar her zaman tam raporu doğrudan gösterir.
     const socratic = gradingResult.socraticFeedback;
-    const isGated = !isTeacherView && !!socratic;
+    // YAYIN 016 kontrol koşulu: sunucu yalnızca puanı gönderir; öğrenciye puan paneli gösterilir.
+    const isGradeOnly = !isTeacherView && gradingResult.feedbackMode === 'grade_only';
+    const isGated = !isTeacherView && !isGradeOnly && !!socratic;
     const effectiveLevel = isGated ? scaffoldingLevel : 3;
     const secondaryLabel = effectiveLevel === 2 ? 'Tam Raporu Gör (Önerilmez)' : 'Daha Fazla İpucu';
 
@@ -1449,7 +1479,7 @@ const AppContent = () => {
     // veya bu ödeve 2. (ya da daha sonraki) kez gönderim yaptıysa, sistemi
     // tekrar tekrar denemeye teşvik etmemek için "Kodumu Düzenle" butonu
     // footer'dan tamamen kaldırılır (yalnızca "Kapat" kalır).
-    const isSuccessful = (gradingResult.grade ?? 0) >= 90;
+    const isSuccessful = (gradingResult.grade ?? 0) >= studyConfig.success_threshold;
 
     // Test 3 - Pedagojik Deneme Gruplaması: aynı ödev + aynı öğrenciye ait tüm
     // denemeler kronolojik sırayla çıkarılır. Bu liste hem "Kaçıncı deneme"
@@ -1464,7 +1494,7 @@ const AppContent = () => {
       )
       .sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
     const currentAttemptIndex = attemptSiblings.findIndex(s => s.id === selectedSubmission.id);
-    const isMaxRetriesReached = attemptSiblings.length >= 2;
+    const isMaxRetriesReached = attemptSiblings.length >= studyConfig.max_attempts;
     const hideEditCodeButton = isSuccessful || isMaxRetriesReached;
 
     const handleEditCode = () => {
@@ -1518,7 +1548,28 @@ const AppContent = () => {
               </div>
             )}
 
-            {isGated && effectiveLevel < 3 ? (
+            {isGradeOnly ? (
+              /* --- Yalnızca Puan (YAYIN 016 kontrol koşulu): geri bildirim metni yok --- */
+              <div className="flex-1 overflow-y-auto p-8 sm:p-16">
+                <div className="max-w-xl mx-auto flex flex-col items-center text-center py-8">
+                  <span className="text-slate-500 font-black uppercase tracking-[0.3em] text-[10px] mb-6">Değerlendirme Sonucu</span>
+                  <div className={`w-40 h-40 rounded-full flex flex-col items-center justify-center border-8 mb-8 shadow-2xl ${gradingResult.grade >= 70 ? 'border-emerald-500/10 text-emerald-400' :
+                    gradingResult.grade >= 50 ? 'border-amber-500/10 text-amber-400' : 'border-rose-500/10 text-rose-400'
+                    }`}>
+                    <span className="text-6xl font-black tracking-tighter">{gradingResult.grade}</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50">PUAN</span>
+                  </div>
+                  <p className="text-slate-300 text-sm">
+                    {currentAttemptIndex >= 0 ? currentAttemptIndex + 1 : attemptSiblings.length}. teslim / en fazla {studyConfig.max_attempts} teslim
+                  </p>
+                  {!hideEditCodeButton && (
+                    <p className="text-slate-400 text-sm mt-3">
+                      İstersen kodunu düzenleyip yeniden gönderebilirsin.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : isGated && effectiveLevel < 3 ? (
               /* --- Sokratik Kapı: Seviye 0 (Farkındalık) / 1 (+Yönlendirme) / 2 (+İpucu) --- */
               <div className="flex-1 overflow-y-auto p-8 sm:p-16">
                 <div className="max-w-2xl mx-auto flex flex-col items-center text-center py-8">
@@ -1739,7 +1790,7 @@ const AppContent = () => {
             </div>
             )}
 
-            {isGated && (
+            {(isGated || isGradeOnly) && (
               <div className={`border-t border-dark-700/60 bg-dark-900/60 p-5 sm:p-6 flex flex-col-reverse sm:flex-row items-center gap-3 shrink-0 ${hideEditCodeButton ? 'justify-center' : 'justify-between'}`}>
                 {effectiveLevel < 3 ? (
                   <button
@@ -2274,7 +2325,13 @@ const AppContent = () => {
   };
 
   return (
-    <Layout user={user} onLogout={handleLogout} currentView={currentView} setCurrentView={setCurrentView}>
+    <Layout
+      user={user}
+      onLogout={handleLogout}
+      currentView={currentView}
+      setCurrentView={setCurrentView}
+      showLeaderboard={studyConfig.gamification_enabled || user.role !== UserRole.STUDENT}
+    >
       {currentView === 'home' && renderHomeView()}
       {currentView === 'teacher_dashboard' && (
         (user.role === UserRole.TEACHER || user.role === UserRole.SUPERADMIN) ? <TeacherDashboard /> : <Unauthorized403 />
@@ -2299,7 +2356,7 @@ const AppContent = () => {
         user.role === UserRole.SUPERADMIN ? <SuperAdminDashboard /> : <Unauthorized403 />
       )}
       {currentView === 'profile' && renderProfileView()}
-      {currentView === 'leaderboard' && <Leaderboard />}
+      {currentView === 'leaderboard' && (studyConfig.gamification_enabled || user.role !== UserRole.STUDENT) && <Leaderboard />}
       {selectedSubmission && renderSubmissionDetailModal()}
 
       {toast && toast.visible && (
