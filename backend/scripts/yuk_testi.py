@@ -48,7 +48,7 @@ async def main():
         usd = gir / 1e6 * FIYAT_GIRDI + cik / 1e6 * FIYAT_CIKTI
         if ok:
             maliyet.append(usd)
-        print(f"  #{i:2d} | {s:5.1f} sn | {'BAŞARILI' if ok else 'HATA    '} | puan {g:3d} | rubrik {rub} | deneme {u.get('attempts', '-')} | girdi {gir} çıktı+düşünme {cik} token | ${usd:.4f}")
+        print(f"  #{i:2d} | {s:5.1f} sn | {'BAŞARILI' if ok else 'HATA    '} | puan {g:3d} | rubrik {rub} | deneme {u.get('attempts', '-')} | girdi {gir} çıktı+düşünme {cik} token | ${usd:.4f} | bitiş {u.get('finish_reason', '-')}")
     basarili = sum(1 for x in sonuc if x[2])
     print(f"Toplam {time.perf_counter() - t:.1f} sn | başarılı {basarili}/{N}")
     puanlar = sorted({x[3] for x in sonuc if x[2]})
