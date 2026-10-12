@@ -4,10 +4,11 @@ import asyncio
 import re
 import hashlib
 import time
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
 from .schemas import (
     GradingResult,
@@ -193,6 +194,7 @@ class StrictSocraticFeedback(BaseModel):
 
 
 class StrictPedagogicalMetadata(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     feedback_strategy: str
     scaffolding_level: ScaffoldingLevel
     student_level: str
@@ -318,18 +320,71 @@ API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 # YAYIN 016 (T3): varsayılan kararlı sürüm. gemini-3-flash-preview Aralık 2025 önizlemesiydi;
 # gemini-3.8-flash için Google'ın otomatik sürüm yönlendirmesi yok (sürüm dondurmaya uygun).
 MODEL_NAME = (os.getenv("GEMINI_MODEL_NAME") or "gemini-3.8-flash").strip()
-print(f"CodeGradeAI: değerlendirme modeli = {MODEL_NAME}")
 try:
     LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.4"))
 except ValueError:
     LLM_TEMPERATURE = 0.4
+# Gemini 3.x düşünme düzeyi (low/medium/high; 3.6'da minimal de var). Varsayılan "low":
+# 13.10.2026 yük testinde varsayılan (medium) düzeyde yanıtlar 13-68 sn sürdü.
+LLM_THINKING_LEVEL = (os.getenv("LLM_THINKING_LEVEL") or "low").strip().upper()
+try:
+    LLM_MAX_OUTPUT_TOKENS = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "16384"))
+except ValueError:
+    LLM_MAX_OUTPUT_TOKENS = 16384
+try:
+    # Bozuk/eksik JSON gelirse aynı istek en fazla bu kadar kez yeniden denenir.
+    LLM_RETRIES = max(0, int(os.getenv("LLM_RETRIES", "1")))
+except ValueError:
+    LLM_RETRIES = 1
 
-
+print(f"CodeGradeAI: değerlendirme modeli = {MODEL_NAME} | sıcaklık = {LLM_TEMPERATURE} | düşünme = {LLM_THINKING_LEVEL} | yeniden deneme = {LLM_RETRIES}")
 
 if not API_KEY:
     print("WARNING: API Key (GEMINI_API_KEY or GOOGLE_API_KEY) is not set in environment variables.")
-else:
-    genai.configure(api_key=API_KEY)
+
+_CLIENT = None
+
+
+def _get_client():
+    """google-genai istemcisi (google-generativeai 0.7.2'nin desteği 30.11.2025'te bitti;
+    yeni modellere yanıt şemasını güvenilir iletmiyordu: 13.10.2026 yük testinde 6/10 hata)."""
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = genai.Client(api_key=API_KEY)
+    return _CLIENT
+
+
+def _generation_config() -> "genai_types.GenerateContentConfig":
+    kwargs = dict(
+        temperature=LLM_TEMPERATURE,
+        top_p=1,
+        max_output_tokens=LLM_MAX_OUTPUT_TOKENS,
+        response_mime_type="application/json",
+        response_schema=StrictGradingResult,
+    )
+    if LLM_THINKING_LEVEL and LLM_THINKING_LEVEL != "DEFAULT":
+        kwargs["thinking_config"] = genai_types.ThinkingConfig(thinking_level=LLM_THINKING_LEVEL)
+    return genai_types.GenerateContentConfig(**kwargs)
+
+
+async def _call_model(prompt: str) -> Tuple[str, Dict[str, Any]]:
+    """Modeli çağırır; (yanıt metni, token kullanımı) döndürür. Testlerde taklit edilir."""
+    response = await _get_client().aio.models.generate_content(
+        model=MODEL_NAME, contents=prompt, config=_generation_config()
+    )
+    usage: Dict[str, Any] = {}
+    um = getattr(response, "usage_metadata", None)
+    if um is not None:
+        for key in ("prompt_token_count", "candidates_token_count", "thoughts_token_count", "total_token_count"):
+            val = getattr(um, key, None)
+            if val is not None:
+                usage[key] = val
+    try:
+        fr = response.candidates[0].finish_reason
+        usage["finish_reason"] = str(getattr(fr, "name", fr))
+    except Exception:
+        pass
+    return (response.text or "").strip(), usage
 
 
 def get_system_instruction(student_level: str) -> str:
@@ -554,7 +609,8 @@ def _enrich_pedagogical_metadata(result: GradingResult, student_level: str) -> G
         meta.model_name = MODEL_NAME
     return result
 
-async def grade_submission(request: SubmissionRequest) -> GradingResult:
+async def grade_submission(request: SubmissionRequest, usage: Optional[Dict[str, Any]] = None) -> GradingResult:
+    """usage verilirse token kullanımı ve deneme sayısı içine yazılır (maliyet ve rapor için)."""
     if not API_KEY:
          return GradingResult(
             grade=0,
@@ -581,68 +637,47 @@ Mutlaka doldur: grade, feedback, codeQuality, suggestions, unitTests, rubricScor
 pedagogicalMetadata içinde prompt_version="{PROMPT_VERSION}", rubric_version="{RUBRIC_VERSION}", feedback_strategy="{FEEDBACK_STRATEGY}", model_name="{MODEL_NAME}" kullan.
 """
 
-    generation_config = {
-        # YAYIN 016: aynı koda tutarlı puan için sıcaklık ortam değişkeniyle düşürülebilir
-        # (LLM_TEMPERATURE=0). Varsayılan önceki davranıştır (0.4).
-        "temperature": LLM_TEMPERATURE,
-        "top_p": 1,
-        "top_k": 32,
-        "max_output_tokens": 8192,
-        "response_mime_type": "application/json",
-        "response_schema": StrictGradingResult,
-    }
-    
     # Combined prompt with system instruction
     system_text = get_system_instruction(request.studentLevel)
     final_prompt = f"{system_text}\n\n---\n\n{user_prompt}"
 
-    model = genai.GenerativeModel(
-        model_name=MODEL_NAME,
-        generation_config=generation_config
-    )
+    # Yanıtı modelden al; bozuk JSON veya şema dışı yanıtta LLM_RETRIES kez yeniden dene.
+    last_problem = ""
+    for attempt in range(1 + LLM_RETRIES):
+        try:
+            text, call_usage = await _call_model(final_prompt)
+        except Exception as e:
+            # Ağ/API seviyesindeki hatalar (kota, zaman aşımı vb.) yeniden denenmez; 500 fırlatılmaz.
+            print(f"Error calling Gemini: {e}")
+            return _fallback_grading_result(
+                "Yapay zeka servisiyle iletişimde bir sorun oluştu, lütfen daha sonra tekrar deneyin."
+            )
+        if usage is not None:
+            for k, v in call_usage.items():
+                if isinstance(v, (int, float)):
+                    usage[k] = usage.get(k, 0) + v
+                else:
+                    usage[k] = v
+            usage["attempts"] = attempt + 1
 
-    try:
-        # YAYIN 016: generate_content senkron (bloklayan) bir çağrı. Doğrudan async fonksiyon
-        # içinde çağrılınca olay döngüsü 5-20 sn kilitleniyor; tek uvicorn işçisinde tüm
-        # uygulama (giriş, sayfa yükleme, diğer teslimler) sıraya giriyordu. İş parçacığına alınır.
-        response = await asyncio.to_thread(model.generate_content, final_prompt)
-        text = response.text.strip()
-        print(f"DEBUG: AI Response: {text}")
-
-        # Markdown code fence / gürültü temizliği (bazı yanıtlar ```json ... ``` ile döner).
         cleaned_text = sanitize_json(text)
-
-        # JSON ayrıştırması: token limitine takılmış yarım yanıtlar
-        # ("Unterminated string starting at...") burada güvenle yakalanır ve
-        # 500 fırlatmadan öğrenciye anlaşılır bir fallback sonuç döndürülür.
         try:
             result_json = json.loads(cleaned_text)
         except json.JSONDecodeError as parse_error:
-            print(f"WARNING: AI JSON ayrıştırma hatası (muhtemelen token limiti/bozuk yanıt): {parse_error}")
-            return _fallback_grading_result(
-                "Yapay zeka yanıtı eksik ya da bozuk oluşturuldu, lütfen kodunuzu tekrar gönderin."
-            )
-
-        # Şema doğrulaması: JSON geçerli olsa da beklenen alanlar eksik/yanlış
-        # tipte olabilir (örn. modelin şemayı tam doldurmadığı durumlar).
+            last_problem = "Yapay zeka yanıtı eksik ya da bozuk oluşturuldu, lütfen kodunuzu tekrar gönderin."
+            print(f"WARNING: AI JSON ayrıştırma hatası (deneme {attempt + 1}, {call_usage.get('finish_reason')}): {parse_error}")
+            continue
         try:
             strict_result = StrictGradingResult(**_normalize_ai_json(result_json))
         except Exception as validation_error:
-            print(f"WARNING: AI yanıtı şema doğrulamasından geçemedi: {validation_error}")
-            return _fallback_grading_result(
-                "Yapay zeka yanıtı beklenen formatta oluşturulamadı, lütfen kodunuzu tekrar gönderin."
-            )
+            last_problem = "Yapay zeka yanıtı beklenen formatta oluşturulamadı, lütfen kodunuzu tekrar gönderin."
+            print(f"WARNING: AI yanıtı şema doğrulamasından geçemedi (deneme {attempt + 1}): {validation_error}")
+            continue
 
         result = _map_strict_to_grading_result(strict_result)
         return _enrich_pedagogical_metadata(result, request.studentLevel)
 
-    except Exception as e:
-        # Ağ/API seviyesindeki diğer beklenmeyen hatalar (rate limit, timeout, vs.)
-        # dahil olmak üzere hiçbir durumda 500 fırlatılmaz.
-        print(f"Error calling Gemini: {e}")
-        return _fallback_grading_result(
-            "Yapay zeka servisiyle iletişimde bir sorun oluştu, lütfen daha sonra tekrar deneyin."
-        )
+    return _fallback_grading_result(last_problem or "Değerlendirme yapılamadı, lütfen tekrar deneyin.")
 
 
 # --- Faz 3: Sokratik Akış PostgreSQL Kalıcılığı ---
@@ -863,6 +898,7 @@ def finalize_grading_persistence(
     result: GradingResult,
     latency_ms: int,
     student: User,
+    usage: Optional[Dict[str, Any]] = None,
 ) -> Optional[Evaluation]:
     """AI değerlendirmesini evaluations tablosuna yazar ve analysis_completed olayını loglar."""
     grading_json = result.model_dump(mode="json")
@@ -926,6 +962,9 @@ def finalize_grading_persistence(
             "latency_ms": latency_ms,
             "parse_status": parse_status,
             "temperature": LLM_TEMPERATURE,
+            "model_name": MODEL_NAME,
+            "thinking_level": LLM_THINKING_LEVEL,
+            "usage": usage or {},
         },
     )
 
@@ -974,11 +1013,12 @@ async def grade_submission_with_persistence(
         )
 
     start = time.perf_counter()
-    result = await grade_submission(request)
+    usage: Dict[str, Any] = {}
+    result = await grade_submission(request, usage=usage)
     latency_ms = int((time.perf_counter() - start) * 1000)
 
     if session and submission and student:
-        finalize_grading_persistence(db, session, submission, result, latency_ms, student)
+        finalize_grading_persistence(db, session, submission, result, latency_ms, student, usage=usage)
         if _is_ai_failure(result):
             submission.submission_source = SUBMISSION_SOURCE_AI_ERROR
             _log_interaction_event(

@@ -1,5 +1,5 @@
 import json
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Any, Dict, List, Literal, Optional, Union
 from datetime import datetime
 
@@ -59,6 +59,7 @@ class SocraticFeedback(BaseModel):
     direct_solution_given: bool = Field(..., description="Doğrudan çözüm verilip verilmediği")
 
 class PedagogicalMetadata(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     feedback_strategy: str = Field(..., description="Geri bildirim stratejisi")
     scaffolding_level: ScaffoldingLevel = Field(..., description="İskeleleme seviyesi")
     student_level: str = Field(..., description="Öğrenci seviyesi")
