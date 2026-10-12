@@ -80,7 +80,7 @@ def _full_result(grade: int) -> GradingResult:
 
 @pytest.fixture(autouse=True)
 def fake_ai(monkeypatch):
-    async def _fake(request):
+    async def _fake(request, usage=None):
         g = NEXT_GRADE["value"]
         if g is None:
             return services._fallback_grading_result("Hata: servis yanıt vermedi.")
@@ -386,32 +386,26 @@ def test_fidelity_log_rules():
 
 
 def test_ai_call_does_not_block_event_loop(monkeypatch):
-    """generate_content senkron çağrısı iş parçacığında çalışmalı: 5 eşzamanlı değerlendirme ~1 sn."""
+    """Model çağrısı olay döngüsünü kilitlememeli: 5 eşzamanlı değerlendirme ~yarım saniye."""
     import asyncio
     import time
 
-    class FakeModel:
-        def __init__(self, *a, **k):
-            pass
+    async def slow_call(prompt):
+        await asyncio.sleep(0.5)
+        return "{bozuk", {}
 
-        def generate_content(self, prompt):
-            time.sleep(0.5)
-
-            class R:
-                text = "{bozuk"
-            return R()
-
-    monkeypatch.setattr(services.genai, "GenerativeModel", FakeModel)
+    monkeypatch.setattr(services, "_call_model", slow_call)
     monkeypatch.setattr(services, "API_KEY", "test-key", raising=False)
+    monkeypatch.setattr(services, "LLM_RETRIES", 0, raising=False)
     from app.schemas import SubmissionRequest
     req = SubmissionRequest(assignmentDescription="x", assignmentLanguage="C#", studentCode="x")
+
     async def run():
         t = time.perf_counter()
         await asyncio.gather(*[_REAL_GRADE(req) for _ in range(5)])
         return time.perf_counter() - t
 
     assert asyncio.run(run()) < 1.5
-
 
 def test_code_length_limit():
     ids, aid = _setup()
@@ -427,7 +421,7 @@ def test_parallel_requests_cannot_exceed_attempt_limit(monkeypatch):
     import asyncio
     import httpx
 
-    async def slow(request):
+    async def slow(request, usage=None):
         await asyncio.sleep(0.3)
         return _full_result(50)
     monkeypatch.setattr(services, "grade_submission", slow)
@@ -460,17 +454,10 @@ def test_tolerates_unit_tests_without_passed_and_message(monkeypatch):
     full["unitTests"] = [{"testName": "Sınır Değeri (FAILED)"}, {"testName": "Yüksek Not -> Geçti (PASSED)"}, "Düz metin testi"]
     text = _json.dumps(full, ensure_ascii=False)
 
-    class FakeModel:
-        def __init__(self, *a, **k):
-            pass
+    async def call(prompt):
+        return text, {"prompt_token_count": 100}
 
-        def generate_content(self, prompt):
-            class R:
-                pass
-            R.text = text
-            return R()
-
-    monkeypatch.setattr(services.genai, "GenerativeModel", FakeModel)
+    monkeypatch.setattr(services, "_call_model", call)
     monkeypatch.setattr(services, "API_KEY", "test-key", raising=False)
     from app.schemas import SubmissionRequest
     req = SubmissionRequest(assignmentDescription="x", assignmentLanguage="C#", studentCode="x")
@@ -478,3 +465,30 @@ def test_tolerates_unit_tests_without_passed_and_message(monkeypatch):
     assert r.pedagogicalMetadata is not None, r.feedback
     assert [t.passed for t in r.unitTests] == [False, True, False]
     assert all(t.message == "" for t in r.unitTests)
+
+
+def test_retries_once_on_broken_json_and_records_usage(monkeypatch):
+    """Bozuk JSON gelirse bir kez yeniden denenir; token kullanımı ve deneme sayısı kaydedilir."""
+    import asyncio
+    import json as _json
+
+    full = _full_result(64).model_dump(mode="json")
+    full["errorFindings"] = []
+    good = _json.dumps(full, ensure_ascii=False)
+    calls = {"n": 0}
+
+    async def call(prompt):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return '{"grade": 64, "feedback": "yarım', {"prompt_token_count": 1000, "candidates_token_count": 50, "finish_reason": "MAX_TOKENS"}
+        return good, {"prompt_token_count": 1000, "candidates_token_count": 800, "thoughts_token_count": 200, "finish_reason": "STOP"}
+
+    monkeypatch.setattr(services, "_call_model", call)
+    monkeypatch.setattr(services, "API_KEY", "test-key", raising=False)
+    monkeypatch.setattr(services, "LLM_RETRIES", 1, raising=False)
+    from app.schemas import SubmissionRequest
+    req = SubmissionRequest(assignmentDescription="x", assignmentLanguage="C#", studentCode="x")
+    usage = {}
+    r = asyncio.run(_REAL_GRADE(req, usage=usage))
+    assert r.pedagogicalMetadata is not None and calls["n"] == 2
+    assert usage["attempts"] == 2 and usage["prompt_token_count"] == 2000 and usage["finish_reason"] == "STOP"

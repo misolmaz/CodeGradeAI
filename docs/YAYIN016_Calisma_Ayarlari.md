@@ -12,6 +12,12 @@ Bu dal (`study-016-prep`), CodeGradeAI'yi deney-kontrol çalışmasına hazırla
 | `SUCCESS_GRADE_THRESHOLD` | `90` | Bu puan alınınca o ödeve yeni teslim kabul edilmez |
 | `MAX_CODE_CHARS` | `20000` | Teslim edilen kodun en fazla uzunluğu; aşılırsa 413 |
 | `LLM_TEMPERATURE` | `0` | Değerlendirme modelinin sıcaklığı. Varsayılan 0.4; aynı koda farklı puan verme olasılığını azaltmak için 0. Her değerlendirme olayının metadata'sına yazılır |
+| `GEMINI_MODEL_NAME` | `gemini-3.8-flash` | Değerlendirme modeli (boşsa varsayılan `gemini-3.8-flash`) |
+| `LLM_THINKING_LEVEL` | `low` | Modelin düşünme düzeyi (`low`, `medium`, `high`; `default` model varsayılanını kullanır). Düşük düzey süreyi ve maliyeti azaltır |
+| `LLM_RETRIES` | `1` | Model bozuk veya şemaya uymayan JSON döndürürse yeniden deneme sayısı. API hatalarında yeniden denenmez |
+| `LLM_MAX_OUTPUT_TOKENS` | `16384` | Yanıt için en fazla token (düşünme tokenları dahil) |
+
+Her değerlendirmenin `analysis_completed` olayına `model_name`, `thinking_level` ve `usage` (girdi, çıktı, düşünme token sayıları, deneme sayısı) yazılır; maliyet buradan hesaplanır.
 
 Değişken eklendikten veya değiştikten sonra backend yeniden başlatılmalıdır. Varsayılanlar mevcut davranışı korur (`GRADE_ONLY_CLASS_CODES` boşsa herkes Sokratik alır).
 
