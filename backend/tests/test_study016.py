@@ -446,3 +446,35 @@ def test_parallel_requests_cannot_exceed_attempt_limit(monkeypatch):
     # Sonra sıralı ikinci deneme hâlâ mümkün, üçüncüsü değil
     assert _grade(h, aid).status_code == 200
     assert _grade(h, aid).status_code == 409
+
+
+def test_tolerates_unit_tests_without_passed_and_message(monkeypatch):
+    """Model unitTests öğelerinde passed/message alanlarını atlarsa değerlendirme reddedilmemeli."""
+    import asyncio
+    import json as _json
+
+    full = _full_result(60).model_dump(mode="json")
+    full["errorFindings"] = [{"error_type": "logic_error", "severity": "medium",
+                              "location_hint": "satır 6", "explanation": "Tam sayı bölmesi",
+                              "misconception": "yok"}]
+    full["unitTests"] = [{"testName": "Sınır Değeri (FAILED)"}, {"testName": "Yüksek Not -> Geçti (PASSED)"}, "Düz metin testi"]
+    text = _json.dumps(full, ensure_ascii=False)
+
+    class FakeModel:
+        def __init__(self, *a, **k):
+            pass
+
+        def generate_content(self, prompt):
+            class R:
+                pass
+            R.text = text
+            return R()
+
+    monkeypatch.setattr(services.genai, "GenerativeModel", FakeModel)
+    monkeypatch.setattr(services, "API_KEY", "test-key", raising=False)
+    from app.schemas import SubmissionRequest
+    req = SubmissionRequest(assignmentDescription="x", assignmentLanguage="C#", studentCode="x")
+    r = asyncio.run(_REAL_GRADE(req))
+    assert r.pedagogicalMetadata is not None, r.feedback
+    assert [t.passed for t in r.unitTests] == [False, True, False]
+    assert all(t.message == "" for t in r.unitTests)
