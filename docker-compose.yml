@@ -7,6 +7,7 @@ services:
       - "8000:8000"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL_NAME=${GEMINI_MODEL_NAME:-gemini-3.8-flash}
       - ALLOWED_ORIGINS=http://your-vps-ip,http://your-domain.com
       - PORT=8000
       - DATABASE_URL=sqlite:////app/data/sql_app.db

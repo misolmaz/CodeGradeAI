@@ -261,7 +261,10 @@ def _map_strict_to_grading_result(strict: StrictGradingResult) -> GradingResult:
 # Check both GEMINI_API_KEY and GOOGLE_API_KEY for service compatibility
 API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 # Default to the most universal stable model if not specified
-MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+# YAYIN 016 (T3): varsayılan kararlı sürüm. gemini-3-flash-preview Aralık 2025 önizlemesiydi;
+# gemini-3.8-flash için Google'ın otomatik sürüm yönlendirmesi yok (sürüm dondurmaya uygun).
+MODEL_NAME = (os.getenv("GEMINI_MODEL_NAME") or "gemini-3.8-flash").strip()
+print(f"CodeGradeAI: değerlendirme modeli = {MODEL_NAME}")
 try:
     LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.4"))
 except ValueError:
