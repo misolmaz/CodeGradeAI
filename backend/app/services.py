@@ -201,6 +201,60 @@ class StrictPedagogicalMetadata(BaseModel):
     model_name: str
 
 
+_PASS_MARKERS = ("(PASSED)", "(PASS)", "(GEÇTİ)", "(BAŞARILI)", "✅")
+_FAIL_MARKERS = ("(FAILED)", "(FAIL)", "(KALDI)", "(BAŞARISIZ)", "(HATA)", "❌")
+
+
+def _normalize_ai_json(data: Any) -> Any:
+    """Modelin küçük şema sapmalarını onarır (YAYIN 016 testi, 13.10.2026).
+
+    gemini-3.8-flash bazı yanıtlarda unitTests öğelerini yalnızca testName ile döndürdü
+    ("... (FAILED)"), passed/message alanlarını atladı; bu yüzden tüm değerlendirme
+    reddediliyor ve öğrenci "tekrar deneyin" alıyordu. Yalnızca ikincil alanlar onarılır;
+    rubrik, Sokratik geri bildirim ve meta veri zorunlu kalır (eksikse yine reddedilir).
+    """
+    if not isinstance(data, dict):
+        return data
+    tests = data.get("unitTests")
+    if isinstance(tests, list):
+        fixed = []
+        for t in tests:
+            if isinstance(t, str):
+                t = {"testName": t}
+            if not isinstance(t, dict):
+                continue
+            name = str(t.get("testName") or "Test")
+            msg = t.get("message")
+            if not isinstance(t.get("passed"), bool):
+                upper = f"{name} {msg or ''}".upper()
+                if any(m.upper() in upper for m in _FAIL_MARKERS):
+                    t["passed"] = False
+                elif any(m.upper() in upper for m in _PASS_MARKERS):
+                    t["passed"] = True
+                else:
+                    t["passed"] = False
+            if not isinstance(msg, str):
+                t["message"] = ""
+            t["testName"] = name
+            fixed.append(t)
+        data["unitTests"] = fixed
+    elif tests is None:
+        data["unitTests"] = []
+    if not isinstance(data.get("suggestions"), list):
+        data["suggestions"] = []
+    findings = data.get("errorFindings")
+    if isinstance(findings, list):
+        for f in findings:
+            if isinstance(f, dict):
+                for k in ("location_hint", "misconception", "explanation"):
+                    if not isinstance(f.get(k), str):
+                        f[k] = ""
+    for k in ("feedback", "codeQuality"):
+        if not isinstance(data.get(k), str):
+            data[k] = ""
+    return data
+
+
 class StrictGradingResult(BaseModel):
     grade: int
     feedback: str
@@ -261,7 +315,10 @@ def _map_strict_to_grading_result(strict: StrictGradingResult) -> GradingResult:
 # Check both GEMINI_API_KEY and GOOGLE_API_KEY for service compatibility
 API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 # Default to the most universal stable model if not specified
-MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+# YAYIN 016 (T3): varsayılan kararlı sürüm. gemini-3-flash-preview Aralık 2025 önizlemesiydi;
+# gemini-3.8-flash için Google'ın otomatik sürüm yönlendirmesi yok (sürüm dondurmaya uygun).
+MODEL_NAME = (os.getenv("GEMINI_MODEL_NAME") or "gemini-3.8-flash").strip()
+print(f"CodeGradeAI: değerlendirme modeli = {MODEL_NAME}")
 try:
     LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.4"))
 except ValueError:
@@ -569,7 +626,7 @@ pedagogicalMetadata içinde prompt_version="{PROMPT_VERSION}", rubric_version="{
         # Şema doğrulaması: JSON geçerli olsa da beklenen alanlar eksik/yanlış
         # tipte olabilir (örn. modelin şemayı tam doldurmadığı durumlar).
         try:
-            strict_result = StrictGradingResult(**result_json)
+            strict_result = StrictGradingResult(**_normalize_ai_json(result_json))
         except Exception as validation_error:
             print(f"WARNING: AI yanıtı şema doğrulamasından geçemedi: {validation_error}")
             return _fallback_grading_result(
