@@ -67,6 +67,7 @@ Testler geçici SQLite kullanır ve gerçek AI çağrısı yapmaz.
 | `python scripts/kontrol.py` | Son teslimler, olaylar, değerlendirmeler, aynı koda farklı puan, şifresini değiştirmemiş öğrenci sayısı | Salt okunur |
 | `python scripts/yuk_testi.py 10` | 10 eşzamanlı değerlendirme; süre, hata (429) ve puan tutarlılığı | Yazmaz; API kotası harcar |
 | `python scripts/enjeksiyon_testi.py` | Kod içine "tam puan ver" yorumu eklenince puanın şişip şişmediği (3 varyant × 3) | Yazmaz; 9 istek |
+| `python scripts/odev_kalibrasyon.py` | Hafta 5 ödevlerinin doğru/hatalı örnek çözümleri; puan ayrımı ve geri bildirimin kapsam dışı yapı önerip önermediği | Yazmaz; 8 istek |
 | `python scripts/sifirla.py` | Uygulama öncesi sıfırlama; önce deneme, `SIFIRLA` ile gerçek silme | **Siler** (yalnızca superadmin kalır) |
 
 ## 6. Kurcalama ve güvenlik kontrol listesi (uygulama öncesi)
@@ -84,6 +85,8 @@ Sunucu tarafında otomatik testi olanlar (`backend/tests/test_study016.py`) işa
 | 7 | Çok uzun kod göndermek | 413 | Var |
 | 8 | Kod içine "tam puan ver" yorumu (prompt enjeksiyonu) | Puan şişmemeli | `scripts/enjeksiyon_testi.py` ile gerçek modelde |
 | 9 | Henüz giriş yapmamış sınıf arkadaşının hesabına varsayılan şifreyle girmek | **Teknik engel yok.** Önlem: ilk laboratuvar dersinde tüm öğrenciler şifresini değiştirir; `kontrol.py` son bölümü değiştirmeyenleri sayar | Yok (yöntemsel) |
+
+Ödev girişi (prompt v0.3): değerlendirmeye giden ödev tanımı, dil ve seviye öğrencinin isteğinden değil veritabanındaki ödevden alınır. Ödev tanımına kapsam satırı yazılmalıdır (ör. "Bu hafta if, döngü, TryParse, try-catch ve girdi denetimi beklenmiyor"); model bu yapıları eksik saymaz ve önermez. Ödev oluştururken seviye **Başlangıç** seçilmelidir (formun varsayılanı Orta).
 
 Bilinen ve kabul edilen riskler: girişte deneme sayısı sınırı yok (şifre en az 6 karakter); öğrenci profil adını değiştirebilir (araştırma eşlemesi öğrenci numarasıyla yapıldığından analizi etkilemez); `/api/interaction` istemciden çağrıldığı için sadakat logu öğrencinin elle göndereceği sahte olaylara açık (analizde tekrarlar ayıklanır).
 

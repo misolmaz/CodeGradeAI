@@ -66,7 +66,7 @@ def _grade_of(submission: Submission) -> int:
     return 0
 
 
-def _validate_student_submission(db: Session, student: User, request: SubmissionRequest) -> None:
+def _validate_student_submission(db: Session, student: User, request: SubmissionRequest) -> Assignment:
     if student.is_first_login:
         raise HTTPException(status_code=403, detail="Ödev göndermeden önce parolanızı değiştirmelisiniz.")
     if not request.assignmentId:
@@ -89,6 +89,7 @@ def _validate_student_submission(db: Session, student: User, request: Submission
         raise HTTPException(status_code=409, detail="Bu ödev için teslim hakkınız dolmuştur.")
     if any(_grade_of(s) >= success_grade_threshold() for s in previous):
         raise HTTPException(status_code=409, detail="Bu ödevi zaten başarıyla tamamladınız.")
+    return assignment
 
 
 @router.get("/api/config")
@@ -125,7 +126,15 @@ async def grade_code(
         inflight_key = (current_user.id, request.assignmentId)
         if inflight_key in _INFLIGHT:
             raise HTTPException(status_code=409, detail="Bu ödev için değerlendirme sürüyor; lütfen bekleyin.")
-        _validate_student_submission(db, current_user, request)
+        assignment = _validate_student_submission(db, current_user, request)
+        # Değerlendirme girdisi (ödev tanımı, dil, seviye) istemciden değil veritabanından alınır;
+        # öğrenci isteği elle değiştirerek tanıma "tam puan ver" gibi talimat ekleyemez.
+        level = (assignment.student_level or "").strip().lower()
+        request = request.model_copy(update={
+            "assignmentDescription": assignment.description or "",
+            "assignmentLanguage": assignment.language or request.assignmentLanguage,
+            "studentLevel": level if level in ("beginner", "intermediate", "advanced") else "beginner",
+        })
         _INFLIGHT.add(inflight_key)
         persist_user = current_user
     else:

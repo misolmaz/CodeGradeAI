@@ -135,8 +135,8 @@ def process_excel_upload(file_contents: bytes, db: Session, admin_user: User = N
 # ... (Existing Gemini functions) ...
 
 # --- v0.2 Pedagogical Prompt Constants (Faz 2) ---
-PROMPT_VERSION = "cgai_prompt_v0.2"
-RUBRIC_VERSION = "cgai_rubric_v0.2"
+PROMPT_VERSION = "cgai_prompt_v0.3"
+RUBRIC_VERSION = "cgai_rubric_v0.3"
 FEEDBACK_STRATEGY = "socratic_scaffolding"
 
 ERROR_TAXONOMY = [
@@ -456,7 +456,7 @@ socraticFeedback objesini şu sırayla doldur:
 4. next_action — Öğrencinin bir sonraki denemede somut olarak neyi değiştirmesi gerektiği.
 5. direct_solution_given — boolean; tam çözüm verilmediyse false.
 
-NO DIRECT CODE IN HINTS: progressive_hint ve next_action alanlarında KESİNLİKLE Python kodu, fonksiyon adı (örn: range()) veya matematiksel operatör (örn: %, ==) kullanma. Sadece kavramsal ve mantıksal yönlendirme yap.
+NO DIRECT CODE IN HINTS: progressive_hint ve next_action alanlarında KESİNLİKLE kod, fonksiyon adı (örn: range()) veya matematiksel operatör (örn: %, ==) kullanma. Sadece kavramsal ve mantıksal yönlendirme yap.
 
 Varsayılan iskeleleme seviyesi: {config["scaffolding_default"]}
 İzin verilen scaffolding_level değerleri: {scaffolding_list}
@@ -488,7 +488,17 @@ rubricScores objesinde 5 kriterin her biri 1 ile 5 arasında tam sayı olmalı:
 - code_readability (kod okunabilirliği)
 - debugging_awareness (hata ayıklama farkındalığı)
 
-DEBUGGING AWARENESS: Rubrikteki debugging_awareness (hata ayıklama farkındalığı) kriterini; öğrencinin sınır değerleri (edge cases) düşünme, istenmeyen girişleri kontrol etme veya kodu patlamaya karşı koruma (örn. try-except) çabasına göre 1 ile 5 arasında puanla. Eğer koddaki mantık çok düzse ve bu çaba yoksa 1 ver.
+DEBUGGING AWARENESS: debugging_awareness (hata ayıklama farkındalığı) kriterini, ödev tanımının kapsamı içinde kalarak 1 ile 5 arasında puanla. Ödev tanımı girdi denetimini veya hata yakalamayı kapsam dışı bırakıyorsa bunların yokluğu için puan düşürme; bu durumda öğrencinin verilen aralıktaki sınır değerleri (ör. 0, en büyük değer) doğru işleyip işlemediğine, doğru tür ve bölme seçimine, kontrol eşitliği veya test notu gibi doğrulama izlerine bak. Kapsam kısıtı yoksa sınır değerleri düşünme, istenmeyen girişleri kontrol etme ve kodu çökmeye karşı koruma çabasını değerlendir.
+
+---
+
+## ÖDEV KAPSAMI (ZORUNLU)
+
+Ödev tanımı bu haftanın kapsamını belirler ve rubrikten önce gelir.
+1. Ödev tanımında kapsam dışı veya "beklenmiyor" denilen yapıları (ör. koşul, döngü, dizi, metot, TryParse, try-catch, girdi denetimi) eksik sayma, puan düşürme ve geri bildirimde, ipuçlarında ya da önerilerde önerme.
+2. Ödev tanımında belirtilen geçerli girdi varsayımlarını kabul et; aralık dışı veya biçimsiz girdi için hata bulgusu üretme.
+3. Ondalık ayıracının kültüre göre nokta veya virgül görünmesini (ör. 60,33 ve 60.33) hata sayma.
+4. Ödev tanımında belirtilen dil sürümüne uy (ör. C# 5); daha yeni dil özelliklerini önerme.
 
 ---
 
